@@ -1,12 +1,12 @@
-use anyhow::{anyhow, bail};
-use chess::{Board, Color as SquareColor, Piece, Square};
-use sdl2::image::Sdl2ImageContext;
-use sdl2::image::{InitFlag, LoadTexture};
+
+use chess::{Board, Color as SquareColor, File, Piece, Rank, Square};
+
+use sdl2::image::{LoadTexture};
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::{Canvas, Texture, TextureCreator};
 use sdl2::video::{Window, WindowContext};
-use sdl2::Sdl;
+
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -155,12 +155,12 @@ impl<'s> RenderSystem<'s> {
         if self.flipped {
             self.canvas.set_draw_color(LIGHT_SQUARE);
         } else {
-            self.canvas.set_draw_color(Color::RGB(0xD1, 0x8B, 0x47));
+            self.canvas.set_draw_color(DARK_SQUARE);
         }
         self.canvas.clear();
 
         if self.flipped {
-            self.canvas.set_draw_color(Color::RGB(0xD1, 0x8B, 0x47));
+            self.canvas.set_draw_color(DARK_SQUARE);
         } else {
             self.canvas.set_draw_color(LIGHT_SQUARE);
         }
@@ -180,5 +180,23 @@ impl<'s> RenderSystem<'s> {
             }
             row += 1;
         }
+    }
+
+    pub fn get_square(&self, x: i32, y: i32) -> Option<Square> {
+        let norm_x = (x as f32 / self.square_size as f32).floor();
+        let mut norm_y = (y as f32 / self.square_size as f32).floor();
+
+        if !self.flipped {
+            norm_y = 7.0 - norm_y;
+        }
+
+        if norm_x < 0.0 || norm_x > 7.0 || norm_y < 0.0 || norm_y > 7.0 {
+            return None;
+        }
+
+        let rank = Rank::from_index(norm_y as usize);
+        let file = File::from_index(norm_x as usize);
+
+        Some(Square::make_square(rank, file))
     }
 }

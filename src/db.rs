@@ -11,6 +11,6 @@ pub fn load_default_database() -> anyhow::Result<OpeningDatabase> {
     load_database(Path::new("prep"))
 }
 
-pub fn load_database(root: &Path) -> anyhow::Result<OpeningDatabase> {
+pub fn load_database(_root: &Path) -> anyhow::Result<OpeningDatabase> {
     todo!()
 }

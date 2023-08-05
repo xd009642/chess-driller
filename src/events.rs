@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use sdl2::keyboard::Keycode;
+use sdl2::mouse::MouseButton;
 use sdl2::EventPump;
 
 pub struct EventSystem {
@@ -7,10 +8,12 @@ pub struct EventSystem {
     should_close: bool,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Event {
     Close,
     FlipBoard,
     Reset,
+    MouseDown { x: i32, y: i32 },
 }
 
 impl EventSystem {
@@ -40,7 +43,12 @@ impl EventSystem {
                         println!("Unsupported key: {:?}", keycode);
                     }
                 },
-                e => {}
+                SdlEvent::MouseButtonDown {
+                    x, y, mouse_btn, ..
+                } if mouse_btn == MouseButton::Left => {
+                    events.push(Event::MouseDown { x, y });
+                }
+                _e => {}
             }
         }
         events
