@@ -2,12 +2,7 @@ use crate::prelude::*;
 use anyhow::{anyhow, bail};
 use chess::{Board, ChessMove};
 
-use sdl2::image::{InitFlag};
-
-
-
-
-
+use sdl2::image::InitFlag;
 
 pub mod db;
 pub mod events;
@@ -20,6 +15,7 @@ pub mod prelude {
 }
 
 pub fn run() -> anyhow::Result<()> {
+    let database = OpeningDatabase::load_default()?;
     let ctx = sdl2::init().map_err(|e| anyhow!(e))?;
     let width = 600;
     let video = ctx.video().map_err(|e| anyhow!(e))?;
@@ -44,6 +40,9 @@ pub fn run() -> anyhow::Result<()> {
     let mut running = true;
 
     let mut board = Board::default();
+    // Just putting here to decide if we want to store the openings as a graph of `Board` because
+    // that might be fast and simple :thinking:
+    println!("Board is: {} bytes in memory", std::mem::size_of::<Board>());
 
     let mut selected_square = None;
     while running {

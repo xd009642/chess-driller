@@ -1,0 +1,14 @@
+[Event "Vienna Gambit: Main Line"]
+[Site "https://lichess.org/study/ePMOV5k4"]
+[Date "18.02.2021"]
+[Result "*"]
+[Annotator "https://lichess.org/@/anomality"]
+[UTCDate "2021.02.18"]
+[UTCTime "12:37:58"]
+[Variant "Standard"]
+[ECO "C29"]
+[Opening "Vienna Game: Vienna Gambit, Main Line"]
+
+1. e4 e5 2. Nc3 Nf6 3. f4 d5 4. fxe5 Nxe4 5. Nf3 Bc5 6. Qe2 (6. d4 Bb4 7. a3 (7. Bd2 Nxd2 (7... Bxc3 8. bxc3 c5 9. Bd3)) 7... Bxc3+ (7... Nxc3 8. Qd3 Ba5 9. bxc3 c5 10. Be2 c4 11. Qe3 Nc6 12. O-O) 8. bxc3 Nxc3 9. Qd3 Ne4 10. c4) 6... Bf2+ 7. Kd1 Nxc3+ 8. bxc3 (8. dxc3) 8... Bb6 9. a4 (9. d4) *
+
+

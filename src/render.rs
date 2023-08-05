@@ -1,7 +1,6 @@
-
 use chess::{Board, Color as SquareColor, File, Piece, Rank, Square};
 
-use sdl2::image::{LoadTexture};
+use sdl2::image::LoadTexture;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::{Canvas, Texture, TextureCreator};

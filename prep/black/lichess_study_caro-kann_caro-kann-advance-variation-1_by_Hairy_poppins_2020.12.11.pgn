@@ -1,0 +1,13 @@
+[Event "Caro-Kann: Caro-Kann Advance Variation 1"]
+[Site "https://lichess.org/study/VJb8YgoJ/ZNCxM8af"]
+[Result "*"]
+[UTCDate "2020.12.11"]
+[UTCTime "04:02:27"]
+[Variant "Standard"]
+[ECO "B12"]
+[Opening "Caro-Kann Defense: Advance Variation, Tal Variation"]
+[Annotator "https://lichess.org/@/Hairy_poppins"]
+
+1. e4 c6 2. d4 d5 3. e5 { e5, the Advance Variation: the most common Caro-Kann variation! } 3... Bf5 { Bf5 before e6 is one benefit of the Caro-Kann, as the French Defense leads to the restriction of black’s light-squared bishop. } 4. h4! { h4! The threat is obviously 4...e6 5. g4 which picks up the bishop. } 4... h5 { h5 controls the f4 square along with allowing a retreat square for the bishop. } 5. Bd3 Bxd3 6. Qxd3 Qa5+ (6... e6 { e6 is the most popular move in this position, but it allows Bg5 and black’s dark-squared bishop would be somewhat of annoyance due to it being extremely hard to kick out. Yet, this position is playable after Qb3 and going for this line is totally okay. } 7. Bg5 { After you interpose with Be7, don’t trade off the bishops because of the eventual g4/g5 which would lead to a solid space advantage for white. }) 7. Bd2 { Looking in the future, with queens off the board, white’s pawns are distanced from the rest of the pieces (h4, e5, d4) and black can later attack them. } 7... Qa6 8. Qxa6 Nxa6 9. Nc3 e6 { e6 is the move to play here. Even though the evaluation bar represents an equal position, I find this game easier for black because of white’s pushed pawns. In the future, moves like c5 and Rc8 will exploit white’s weakness and undermine their position. } *
+
+
