@@ -66,26 +66,33 @@ pub fn run() -> anyhow::Result<()> {
     let mut selected_square = None;
     let mut san_moves = vec![];
     let mut game_state: Option<GameState> = None;
+    let mut drag_context = None;
+    let mut pending_promotion_square = None;
     while running {
-        window.render(&board);
+        window.render(&board, selected_square, drag_context);
+
+        if let Some(square) = pending_promotion_square {
+            window.render_promotion_picker(square);
+        }
+
         let pending_events = events.handle_events();
 
         for event in &pending_events {
-            match event {
-                Event::Close => {
+            match event.kind {
+                EventKind::Close => {
                     info!("Closing");
                     running = false;
                 }
-                Event::FlipBoard => {
+                EventKind::FlipBoard => {
                     window.flip();
                 }
-                Event::Reset => {
+                EventKind::Reset => {
                     san_moves.clear();
                     game_state = None;
                     board = Board::default();
                 }
-                Event::MouseDown { x, y } => {
-                    if let Some(square) = window.get_square(*x, *y) {
+                EventKind::MouseClick { x, y } => {
+                    if let Some(square) = window.get_square(x, y) {
                         if let Some(s) = selected_square {
                             let candidate_move = ChessMove::new(s, square, None);
                             if board.legal(candidate_move) {
@@ -120,7 +127,7 @@ pub fn run() -> anyhow::Result<()> {
                         }
                     }
                 }
-                Event::StartPractising => {
+                EventKind::StartPractising => {
                     if let Some(state) = game_state.as_ref() {
                         if state.still_running() {
                             continue;
@@ -143,6 +150,47 @@ pub fn run() -> anyhow::Result<()> {
                         }
                     }
                 }
+                EventKind::MouseDragBegin { x, y } => {
+                    drag_context = Some(DragContext {
+                        current_x: x,
+                        current_y: y,
+                    });
+                    if let Some(square) = window.get_square(x, y) {
+                        if board.piece_on(square).is_some() {
+                            selected_square = Some(square);
+                        }
+                    }
+                }
+                EventKind::MouseDragMove { x, y } => {
+                    drag_context = Some(DragContext {
+                        current_x: x,
+                        current_y: y,
+                    });
+                }
+                EventKind::MouseDragEnd { x, y } => {
+                    if let Some(dst_square) = window.get_square(x, y) {
+                        if let Some(src_square) = selected_square {
+                            let rank = dst_square.get_rank().to_index();
+                            let promotion = match board.piece_on(src_square) {
+                                Some(chess::Piece::Pawn) if rank == 0 || rank == 7 => {
+                                    Some(chess::Piece::Queen)
+                                }
+                                _ => None,
+                            };
+                            let candidate_move = ChessMove::new(src_square, dst_square, promotion);
+                            if board.legal(candidate_move) {
+                                board = board.make_move_new(candidate_move);
+                                selected_square = None;
+                            } else {
+                                selected_square = None;
+                            }
+                        }
+                    }
+
+                    drag_context = None;
+                }
+                // TODO: long click mouse up mouse down?
+                _ => {}
             }
         }
     }
