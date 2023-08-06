@@ -10,10 +10,16 @@ pub struct EventSystem {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Event {
+    /// Close the application
     Close,
+    /// Flips the board perspective
     FlipBoard,
+    /// Reset the board
     Reset,
+    /// Click somewhere on the screen
     MouseDown { x: i32, y: i32 },
+    /// Start playing through your prep
+    StartPractising,
 }
 
 impl EventSystem {
@@ -38,6 +44,9 @@ impl EventSystem {
                     }
                     Some(Keycode::R) => {
                         events.push(Event::Reset);
+                    }
+                    Some(Keycode::Space) => {
+                        events.push(Event::StartPractising);
                     }
                     _ => {
                         println!("Unsupported key: {:?}", keycode);

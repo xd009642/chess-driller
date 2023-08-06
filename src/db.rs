@@ -2,9 +2,10 @@
 //! of a mini stripped-down move database.
 use petgraph::dot::Dot;
 use petgraph::graph::{Graph, NodeIndex};
+use petgraph::visit::Bfs;
 use petgraph::Direction;
 use pgn_reader::{BufferedReader, SanPlus, Skip, Visitor};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -67,7 +68,47 @@ fn load_folder(folder: &Path) -> anyhow::Result<HashMap<PathBuf, OpeningGraph>> 
         // Until then returning each file in a map of PGN file -> Graph
         res.insert(entry.path().to_path_buf(), pgn_visitor.pgn);
     }
+
     Ok(res)
+}
+
+fn merge_graphs(graphs: HashMap<PathBuf, OpeningGraph>) -> OpeningGraph {
+    let mut master_graph = OpeningGraph::default();
+    let mut master_roots = HashMap::new();
+    println!("Merging graphs");
+    for (k, v) in &graphs {
+        println!("Merging {} into master graph", k.display());
+        if master_graph.node_count() == 0 {
+            master_graph = v.clone();
+            for node in v.node_indices() {
+                if v.neighbors_directed(node, Direction::Incoming).count() == 0 {
+                    master_roots.insert(master_graph[node].clone(), node);
+                }
+            }
+        } else {
+            // Keep track of non-root nodes we've seen when merging so we don't check them for
+            // neighbors
+            let mut visited = HashSet::new();
+            // a PGN might contain variations from move 1 meaning a lot of root nodes
+            let mut roots_to_merge_in = vec![];
+            for node in v.node_indices() {
+                if visited.contains(&node) {
+                    continue;
+                }
+                if v.neighbors_directed(node, Direction::Incoming).count() == 0 {
+                    roots_to_merge_in.push(node);
+                    if let Some(root) = master_roots.get(&v[node]) {
+                        // Okay time to merge
+                        let mut bfs = Bfs::new(v, node);
+                        while let Some(next_node) = bfs.next(v) {
+                            visited.insert(next_node);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    master_graph
 }
 
 #[derive(Default, Debug)]

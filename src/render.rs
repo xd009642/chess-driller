@@ -113,6 +113,15 @@ impl<'s> RenderSystem<'s> {
         self.flipped = !self.flipped;
     }
 
+    /// Return what colour we're currently playing as
+    pub fn player(&self) -> SquareColor {
+        if self.flipped {
+            SquareColor::Black
+        } else {
+            SquareColor::White
+        }
+    }
+
     pub fn render(&mut self, board: &Board) {
         self.draw_board();
         self.draw_pieces(board);

@@ -44,6 +44,9 @@ pub fn run() -> anyhow::Result<()> {
     // that might be fast and simple :thinking:
     println!("Board is: {} bytes in memory", std::mem::size_of::<Board>());
 
+    // Without changing the graph structure we need to start tracking the moves from the very
+    // beginning for both white and black - so we'll have a node-index into both.
+
     let mut selected_square = None;
     while running {
         window.render(&board);
@@ -75,6 +78,9 @@ pub fn run() -> anyhow::Result<()> {
                             selected_square = Some(square);
                         }
                     }
+                }
+                Event::StartPractising => {
+                    let player = window.player();
                 }
             }
         }
