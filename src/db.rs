@@ -15,8 +15,8 @@ pub type OpeningGraph = Graph<SanPlus, ()>;
 
 #[derive(Default)]
 pub struct OpeningDatabase {
-    white_openings: HashMap<PathBuf, OpeningGraph>,
-    black_openings: HashMap<PathBuf, OpeningGraph>,
+    white_openings: OpeningGraph,
+    black_openings: OpeningGraph,
 }
 
 impl OpeningDatabase {
@@ -35,8 +35,8 @@ impl OpeningDatabase {
     }
 }
 
-fn load_folder(folder: &Path) -> anyhow::Result<HashMap<PathBuf, OpeningGraph>> {
-    let mut res = HashMap::new();
+fn load_folder(folder: &Path) -> anyhow::Result<OpeningGraph> {
+    let mut graph = OpeningGraph::default();
     for entry in WalkDir::new(folder)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -52,24 +52,17 @@ fn load_folder(folder: &Path) -> anyhow::Result<HashMap<PathBuf, OpeningGraph>> 
             }
         };
         let mut reader = BufferedReader::new(load);
-        let mut pgn_visitor = PgnVisitor::default();
+        let mut pgn_visitor = PgnVisitor::new_with_graph(graph);
         reader.read_game(&mut pgn_visitor)?;
 
-        // debugging we can print the graphs and see they're right!
-        // let pretty_graph = pgn_visitor.pgn.map(|_, node| node.to_string(), |_, _| ());
-        // let dot = Dot::new(&pretty_graph);
-        // println!("{:?}", dot);
-
-        // We should attempt to simplify to the minimum number of graphs (I think each graph should
-        // have a root of the same first move and then branch from there. Though in future if we
-        // want to support transpositions then making it into one giant graph is probably the
-        // smartest... hmmm graph merge algorithms.
-        //
-        // Until then returning each file in a map of PGN file -> Graph
-        res.insert(entry.path().to_path_buf(), pgn_visitor.pgn);
+        graph = pgn_visitor.pgn;
     }
 
-    Ok(res)
+    // debugging we can print the graphs and see they're right!
+    let pretty_graph = graph.map(|_, node| node.to_string(), |_, _| ());
+    let dot = Dot::new(&pretty_graph);
+    println!("{:?}", dot);
+    Ok(graph)
 }
 
 fn merge_graphs(graphs: HashMap<PathBuf, OpeningGraph>) -> OpeningGraph {
@@ -102,10 +95,15 @@ fn merge_graphs(graphs: HashMap<PathBuf, OpeningGraph>) -> OpeningGraph {
                     // the latter.
                     roots_to_merge_in.push(node);
                     if let Some(root) = master_roots.get(&v[node]) {
-                        // Okay time to merge
+                        // Okay time to merge. follow the graph up until we hit our prep limit and
+                        // then start inserting.
                         let mut bfs = Bfs::new(v, node);
+                        // lets skip the root
+                        bfs.next(v);
                         while let Some(next_node) = bfs.next(v) {
                             visited.insert(next_node);
+
+
                         }
                     } else {
                         // No shared root in master graph, we can just add all of this in!
@@ -139,6 +137,17 @@ fn merge_graphs(graphs: HashMap<PathBuf, OpeningGraph>) -> OpeningGraph {
 struct PgnVisitor {
     pgn: OpeningGraph,
     node_stack: Vec<NodeIndex>,
+    first: bool,
+}
+
+impl PgnVisitor {
+    pub fn new_with_graph(pgn: OpeningGraph) -> Self {
+        Self {
+            pgn,
+            node_stack: vec![],
+            first: true,
+        }
+    }
 }
 
 impl Visitor for PgnVisitor {
@@ -149,12 +158,32 @@ impl Visitor for PgnVisitor {
     }
 
     fn san(&mut self, san_plus: SanPlus) {
-        let node = self.pgn.add_node(san_plus);
-        if let Some(old_node) = self.node_stack.last_mut() {
-            self.pgn.add_edge(*old_node, node, ());
-            *old_node = node;
+        if self.first {
+            self.first = false;
+            for node in self.pgn.node_indices() {
+                if self.pgn.neighbors_directed(node, Direction::Incoming).count() == 0 {
+                    if self.pgn[node] == san_plus {
+                        self.node_stack.push(node);
+                    }
+                }
+            }
         } else {
-            self.node_stack.push(node);
+            
+            if let Some(old_node) = self.node_stack.last_mut() {
+
+                for neighbor in self.pgn.neighbors_directed(*old_node, Direction::Outgoing) {
+                    if self.pgn[neighbor] == san_plus {
+                        self.node_stack.push(neighbor);
+                        return;
+                    }
+                }
+                let node = self.pgn.add_node(san_plus);
+                self.pgn.add_edge(*old_node, node, ());
+                *old_node = node;
+            } else {
+                let node = self.pgn.add_node(san_plus);
+                self.node_stack.push(node);
+            }
         }
     }
 

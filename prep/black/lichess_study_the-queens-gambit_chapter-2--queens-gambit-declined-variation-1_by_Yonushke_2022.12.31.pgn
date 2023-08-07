@@ -1,0 +1,13 @@
+[Event "The Queen's Gambit: Chapter 2 : Queen's Gambit Declined Variation 1"]
+[Site "https://lichess.org/study/rMrAjlAG/7uOMM32z"]
+[Result "*"]
+[UTCDate "2022.12.31"]
+[UTCTime "21:52:06"]
+[Variant "Standard"]
+[ECO "D35"]
+[Opening "Queen's Gambit Declined: Exchange Variation"]
+[Annotator "https://lichess.org/@/Yonushke"]
+
+1. d4 { [%csl Rd4] } 1... d5 2. c4 { Here we come back to the queen's gambit to explore another variation, known as the queen's gambit declined. } 2... e6 { Here black is declining the gambit, they don't want any trouble so they don't take the c4 pawn. Here white should simply continue with their development. } 3. Nc3 { White develops their knight and if black takes on c4 white plays e4 with tempo } (3. cxd5 exd5 4. Nc3 { This is also fine. }) 3... Nf6 { Here, it is fine to take on d5 and simply trade pawns, if you wanted you could continue with a move like nf3 or bf4. } (3... dxc4 4. e4! { White now has two very strong center pawns and is attacking c4. Even if white does not get the pawn back, they still have a slight advantage because of their lead in development. } { [%csl Rd4,Re4][%cal Gf1c4] }) 4. cxd5 exd5 5. Nf3 { Now it is a completely equal position and both players have an interesting game. } *
+
+
