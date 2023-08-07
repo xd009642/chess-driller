@@ -1,14 +1,14 @@
 //! Store the opening preparation we want to work over - might rename it in future but it is kind
 //! of a mini stripped-down move database.
-use petgraph::dot::Dot;
+
 use petgraph::graph::{Graph, NodeIndex};
-use petgraph::visit::Bfs;
+
 use petgraph::Direction;
 use pgn_reader::{BufferedReader, SanPlus, Skip, Visitor};
-use std::collections::{HashMap, HashSet};
+
 use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
+
+use std::path::{Path};
 use walkdir::WalkDir;
 
 pub type OpeningGraph = Graph<SanPlus, ()>;
