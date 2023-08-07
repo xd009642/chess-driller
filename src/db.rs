@@ -96,12 +96,36 @@ fn merge_graphs(graphs: HashMap<PathBuf, OpeningGraph>) -> OpeningGraph {
                     continue;
                 }
                 if v.neighbors_directed(node, Direction::Incoming).count() == 0 {
+                    // Now we have a root node we want to traverse along it merging into the graph.
+                    // There's two ways to do this: just add to graph and then prune duplicate
+                    // children, or try to traverse both graphs finding merge points. I'm going for
+                    // the latter.
                     roots_to_merge_in.push(node);
                     if let Some(root) = master_roots.get(&v[node]) {
                         // Okay time to merge
                         let mut bfs = Bfs::new(v, node);
                         while let Some(next_node) = bfs.next(v) {
                             visited.insert(next_node);
+                        }
+                    } else {
+                        // No shared root in master graph, we can just add all of this in!
+                        let mut node_map = HashMap::new();
+                        let mut bfs = Bfs::new(v, node);
+                        while let Some(n) = bfs.next(v) {
+                            visited.insert(n);
+                            let new_node = master_graph.add_node(v[n].clone());
+                            node_map.insert(n, new_node);
+                        }
+                        for edge in v.raw_edges() {
+                            if node_map.contains_key(&edge.source())
+                                && node_map.contains_key(&edge.target())
+                            {
+                                master_graph.add_edge(
+                                    node_map[&edge.source()],
+                                    node_map[&edge.target()],
+                                    (),
+                                );
+                            }
                         }
                     }
                 }
