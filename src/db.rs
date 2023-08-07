@@ -59,78 +59,10 @@ fn load_folder(folder: &Path) -> anyhow::Result<OpeningGraph> {
     }
 
     // debugging we can print the graphs and see they're right!
-    let pretty_graph = graph.map(|_, node| node.to_string(), |_, _| ());
-    let dot = Dot::new(&pretty_graph);
-    println!("{:?}", dot);
+    //let pretty_graph = graph.map(|_, node| node.to_string(), |_, _| ());
+    //let dot = Dot::new(&pretty_graph);
+    //println!("{:?}", dot);
     Ok(graph)
-}
-
-fn merge_graphs(graphs: HashMap<PathBuf, OpeningGraph>) -> OpeningGraph {
-    let mut master_graph = OpeningGraph::default();
-    let mut master_roots = HashMap::new();
-    println!("Merging graphs");
-    for (k, v) in &graphs {
-        println!("Merging {} into master graph", k.display());
-        if master_graph.node_count() == 0 {
-            master_graph = v.clone();
-            for node in v.node_indices() {
-                if v.neighbors_directed(node, Direction::Incoming).count() == 0 {
-                    master_roots.insert(master_graph[node].clone(), node);
-                }
-            }
-        } else {
-            // Keep track of non-root nodes we've seen when merging so we don't check them for
-            // neighbors
-            let mut visited = HashSet::new();
-            // a PGN might contain variations from move 1 meaning a lot of root nodes
-            let mut roots_to_merge_in = vec![];
-            for node in v.node_indices() {
-                if visited.contains(&node) {
-                    continue;
-                }
-                if v.neighbors_directed(node, Direction::Incoming).count() == 0 {
-                    // Now we have a root node we want to traverse along it merging into the graph.
-                    // There's two ways to do this: just add to graph and then prune duplicate
-                    // children, or try to traverse both graphs finding merge points. I'm going for
-                    // the latter.
-                    roots_to_merge_in.push(node);
-                    if let Some(root) = master_roots.get(&v[node]) {
-                        // Okay time to merge. follow the graph up until we hit our prep limit and
-                        // then start inserting.
-                        let mut bfs = Bfs::new(v, node);
-                        // lets skip the root
-                        bfs.next(v);
-                        while let Some(next_node) = bfs.next(v) {
-                            visited.insert(next_node);
-
-
-                        }
-                    } else {
-                        // No shared root in master graph, we can just add all of this in!
-                        let mut node_map = HashMap::new();
-                        let mut bfs = Bfs::new(v, node);
-                        while let Some(n) = bfs.next(v) {
-                            visited.insert(n);
-                            let new_node = master_graph.add_node(v[n].clone());
-                            node_map.insert(n, new_node);
-                        }
-                        for edge in v.raw_edges() {
-                            if node_map.contains_key(&edge.source())
-                                && node_map.contains_key(&edge.target())
-                            {
-                                master_graph.add_edge(
-                                    node_map[&edge.source()],
-                                    node_map[&edge.target()],
-                                    (),
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    master_graph
 }
 
 #[derive(Default, Debug)]
@@ -159,18 +91,26 @@ impl Visitor for PgnVisitor {
 
     fn san(&mut self, san_plus: SanPlus) {
         if self.first {
+            assert!(self.node_stack.is_empty());
             self.first = false;
             for node in self.pgn.node_indices() {
-                if self.pgn.neighbors_directed(node, Direction::Incoming).count() == 0 {
+                if self
+                    .pgn
+                    .neighbors_directed(node, Direction::Incoming)
+                    .count()
+                    == 0
+                {
                     if self.pgn[node] == san_plus {
                         self.node_stack.push(node);
                     }
                 }
             }
+            if self.node_stack.is_empty() {
+                let node = self.pgn.add_node(san_plus);
+                self.node_stack.push(node);
+            }
         } else {
-            
             if let Some(old_node) = self.node_stack.last_mut() {
-
                 for neighbor in self.pgn.neighbors_directed(*old_node, Direction::Outgoing) {
                     if self.pgn[neighbor] == san_plus {
                         self.node_stack.push(neighbor);
@@ -205,7 +145,6 @@ impl Visitor for PgnVisitor {
         } else {
             println!("No root?");
         }
-        println!("Node stack: {:?}", self.node_stack);
         Skip(false)
     }
 
