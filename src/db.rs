@@ -8,7 +8,7 @@ use pgn_reader::{BufferedReader, SanPlus, Skip, Visitor};
 
 use std::fs;
 
-use std::path::{Path};
+use std::path::Path;
 use walkdir::WalkDir;
 
 pub type OpeningGraph = Graph<SanPlus, ()>;

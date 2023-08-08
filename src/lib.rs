@@ -6,6 +6,7 @@ use sdl2::image::InitFlag;
 
 pub mod db;
 pub mod events;
+pub mod game;
 pub mod render;
 
 pub mod prelude {
@@ -15,7 +16,7 @@ pub mod prelude {
 }
 
 pub fn run() -> anyhow::Result<()> {
-    let database = OpeningDatabase::load_default()?;
+    let _database = OpeningDatabase::load_default()?;
     let ctx = sdl2::init().map_err(|e| anyhow!(e))?;
     let width = 600;
     let video = ctx.video().map_err(|e| anyhow!(e))?;
@@ -48,6 +49,7 @@ pub fn run() -> anyhow::Result<()> {
     // beginning for both white and black - so we'll have a node-index into both.
 
     let mut selected_square = None;
+    let mut san_moves = vec![];
     while running {
         window.render(&board);
         let pending_events = events.handle_events();
@@ -69,6 +71,12 @@ pub fn run() -> anyhow::Result<()> {
                         if let Some(s) = selected_square {
                             let candidate_move = ChessMove::new(s, square, None);
                             if board.legal(candidate_move) {
+                                if let Some(san) = game::get_san(candidate_move, &board) {
+                                    println!("{}", san);
+                                    san_moves.push(san);
+                                } else {
+                                    println!("Something went wrong didn't record this move");
+                                }
                                 board = board.make_move_new(candidate_move);
                                 selected_square = None;
                             } else {
@@ -80,7 +88,7 @@ pub fn run() -> anyhow::Result<()> {
                     }
                 }
                 Event::StartPractising => {
-                    let player = window.player();
+                    let _player = window.player();
                 }
             }
         }

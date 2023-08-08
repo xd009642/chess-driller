@@ -5,7 +5,6 @@ use sdl2::EventPump;
 
 pub struct EventSystem {
     pump: EventPump,
-    should_close: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -26,7 +25,6 @@ impl EventSystem {
     pub fn new(sdl: sdl2::Sdl) -> anyhow::Result<Self> {
         Ok(Self {
             pump: sdl.event_pump().map_err(|e| anyhow!(e))?,
-            should_close: false,
         })
     }
 

@@ -14,4 +14,5 @@ petgraph = "0.6.3"
 pgn-reader = "0.25.0"
 radix_trie = "0.2.1"
 sdl2 = { version = "0.35.2", features = ["image"] }
+shakmaty = "0.26.0"
 walkdir = "2.3.3"
