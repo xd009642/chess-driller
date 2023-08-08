@@ -136,10 +136,12 @@ impl<'s> RenderSystem<'s> {
                 let color = board.color_on(square.clone()).unwrap();
 
                 let mut rank = square.get_rank().to_index() as u32;
+                let mut file = square.get_file().to_index() as u32;
                 if !self.flipped {
                     rank = 7 - rank;
+                } else {
+                    file = 7 - file;
                 }
-                let file = square.get_file().to_index() as u32;
 
                 let sprite = &self.sprites[&(piece, color)];
 
@@ -191,11 +193,13 @@ impl<'s> RenderSystem<'s> {
     }
 
     pub fn get_square(&self, x: i32, y: i32) -> Option<Square> {
-        let norm_x = (x as f32 / self.square_size as f32).floor();
+        let mut norm_x = (x as f32 / self.square_size as f32).floor();
         let mut norm_y = (y as f32 / self.square_size as f32).floor();
 
         if !self.flipped {
             norm_y = 7.0 - norm_y;
+        } else {
+            norm_x = 7.0 - norm_x;
         }
 
         if norm_x < 0.0 || norm_x > 7.0 || norm_y < 0.0 || norm_y > 7.0 {

@@ -16,7 +16,7 @@ pub mod prelude {
 }
 
 pub fn run() -> anyhow::Result<()> {
-    let _database = OpeningDatabase::load_default()?;
+    let database = OpeningDatabase::load_default()?;
     let ctx = sdl2::init().map_err(|e| anyhow!(e))?;
     let width = 600;
     let video = ctx.video().map_err(|e| anyhow!(e))?;
@@ -50,6 +50,7 @@ pub fn run() -> anyhow::Result<()> {
 
     let mut selected_square = None;
     let mut san_moves = vec![];
+    let mut game_state: Option<GameState> = None;
     while running {
         window.render(&board);
         let pending_events = events.handle_events();
@@ -64,6 +65,7 @@ pub fn run() -> anyhow::Result<()> {
                     window.flip();
                 }
                 Event::Reset => {
+                    game_state = None;
                     board = Board::default();
                 }
                 Event::MouseDown { x, y } => {
@@ -73,11 +75,26 @@ pub fn run() -> anyhow::Result<()> {
                             if board.legal(candidate_move) {
                                 if let Some(san) = game::get_san(candidate_move, &board) {
                                     println!("{}", san);
-                                    san_moves.push(san);
+                                    board = board.make_move_new(candidate_move);
+                                    if let Some(state) = game_state.as_mut() {
+                                        let prep_status = state.apply_move(&san);
+                                        if prep_status == MoveAssessment::InPrep {
+                                            if let Some(mv) = state.make_move() {
+                                                let text = mv.to_string();
+                                                println!("{}", text);
+                                                board = board.make_move_new(
+                                                    ChessMove::from_san(&board, &text).unwrap(),
+                                                );
+                                            }
+                                        } else {
+                                            println!("You've hit the end: {:?}", prep_status);
+                                        }
+                                    } else {
+                                        san_moves.push(san);
+                                    }
                                 } else {
                                     println!("Something went wrong didn't record this move");
                                 }
-                                board = board.make_move_new(candidate_move);
                                 selected_square = None;
                             } else {
                                 selected_square = Some(square);
@@ -88,7 +105,20 @@ pub fn run() -> anyhow::Result<()> {
                     }
                 }
                 Event::StartPractising => {
-                    let _player = window.player();
+                    println!("Lets start playing!");
+                    game_state = database.start_drill(window.player(), &san_moves);
+                    if let Some(state) = game_state.as_mut() {
+                        if !state.is_player_turn() {
+                            println!("Not the players turn, lets make a move");
+                            if let Some(mv) = state.make_move() {
+                                println!("I made a move?");
+                                let text = mv.to_string();
+                                println!("{}", text);
+                                board = board
+                                    .make_move_new(ChessMove::from_san(&board, &text).unwrap());
+                            }
+                        }
+                    }
                 }
             }
         }

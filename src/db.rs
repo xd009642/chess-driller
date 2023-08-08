@@ -1,15 +1,21 @@
 //! Store the opening preparation we want to work over - might rename it in future but it is kind
 //! of a mini stripped-down move database.
-
 use petgraph::graph::{Graph, NodeIndex};
-
 use petgraph::Direction;
 use pgn_reader::{BufferedReader, SanPlus, Skip, Visitor};
-
 use std::fs;
-
 use std::path::Path;
 use walkdir::WalkDir;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MoveAssessment {
+    /// You're still in prep
+    InPrep,
+    /// You've gone wrong somewhere
+    OutOfPrep,
+    /// Mission completed!
+    PrepEnded,
+}
 
 pub type OpeningGraph = Graph<SanPlus, ()>;
 
@@ -17,6 +23,12 @@ pub type OpeningGraph = Graph<SanPlus, ()>;
 pub struct OpeningDatabase {
     white_openings: OpeningGraph,
     black_openings: OpeningGraph,
+}
+
+pub struct GameState<'a> {
+    openings: &'a OpeningGraph,
+    pub current_move: Option<NodeIndex>,
+    player_turn: bool,
 }
 
 impl OpeningDatabase {
@@ -32,6 +44,106 @@ impl OpeningDatabase {
             white_openings,
             black_openings,
         })
+    }
+
+    pub fn start_drill(&self, player: chess::Color, moves: &[SanPlus]) -> Option<GameState> {
+        let openings = match player {
+            chess::Color::White => &self.white_openings,
+            _ => &self.black_openings,
+        };
+        let mut state = GameState {
+            openings,
+            player_turn: player == chess::Color::White,
+            current_move: None,
+        };
+
+        for m in moves {
+            let prep = state.apply_move(m);
+            if prep != MoveAssessment::InPrep {
+                return None;
+            }
+        }
+        Some(state)
+    }
+}
+
+impl<'a> GameState<'a> {
+    pub fn check_move(&self) -> MoveAssessment {
+        if let Some(current) = self.current_move {
+            if self
+                .openings
+                .neighbors_directed(current, Direction::Outgoing)
+                .count()
+                > 0
+            {
+                MoveAssessment::InPrep
+            } else {
+                MoveAssessment::PrepEnded
+            }
+        } else {
+            MoveAssessment::OutOfPrep
+        }
+    }
+
+    pub fn make_move(&mut self) -> Option<SanPlus> {
+        let candidates = if let Some(index) = self.current_move {
+            self.openings
+                .neighbors_directed(index, Direction::Outgoing)
+                .collect::<Vec<NodeIndex>>()
+        } else {
+            self.find_roots()
+        };
+        let choice = fastrand::choice(candidates.iter())?;
+        self.current_move = Some(*choice);
+        self.player_turn = !self.player_turn;
+        Some(self.openings[*choice].clone())
+    }
+
+    pub fn apply_move(&mut self, san: &SanPlus) -> MoveAssessment {
+        let mut has_neighbors = false;
+        if let Some(index) = self.current_move {
+            for next in self.openings.neighbors_directed(index, Direction::Outgoing) {
+                has_neighbors = true;
+                if &self.openings[next] == san {
+                    self.current_move = Some(next);
+                    self.player_turn = !self.player_turn;
+                    return MoveAssessment::InPrep;
+                }
+            }
+        } else {
+            for root in self.find_roots().iter() {
+                has_neighbors = true;
+                if &self.openings[*root] == san {
+                    self.current_move = Some(*root);
+                    self.player_turn = !self.player_turn;
+                    return MoveAssessment::InPrep;
+                }
+            }
+        }
+        if has_neighbors {
+            MoveAssessment::OutOfPrep
+        } else {
+            MoveAssessment::PrepEnded
+        }
+    }
+
+    pub fn is_player_turn(&self) -> bool {
+        self.player_turn
+    }
+
+    fn find_roots(&self) -> Vec<NodeIndex> {
+        let mut res = vec![];
+        for node in self.openings.node_indices() {
+            if self
+                .openings
+                .neighbors_directed(node, Direction::Incoming)
+                .count()
+                == 0
+            {
+                res.push(node);
+            }
+        }
+        res
     }
 }
 

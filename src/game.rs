@@ -1,5 +1,5 @@
 use chess::{Board, ChessMove, Piece};
-use pgn_reader::{SanPlus};
+use pgn_reader::SanPlus;
 use shakmaty::{fen::Fen, CastlingMode, Chess, Move, Role};
 
 fn convert_piece(piece: Piece) -> Role {
