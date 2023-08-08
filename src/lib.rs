@@ -105,6 +105,13 @@ pub fn run() -> anyhow::Result<()> {
                     }
                 }
                 Event::StartPractising => {
+                    if let Some(state) = game_state.as_ref() {
+                        if state.still_running() {
+                            continue;
+                        }
+                    }
+                    game_state = None;
+                    board = Board::default();
                     println!("Lets start playing!");
                     game_state = database.start_drill(window.player(), &san_moves);
                     if let Some(state) = game_state.as_mut() {

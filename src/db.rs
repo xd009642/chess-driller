@@ -29,6 +29,7 @@ pub struct GameState<'a> {
     openings: &'a OpeningGraph,
     pub current_move: Option<NodeIndex>,
     player_turn: bool,
+    still_running: bool,
 }
 
 impl OpeningDatabase {
@@ -55,6 +56,7 @@ impl OpeningDatabase {
             openings,
             player_turn: player == chess::Color::White,
             current_move: None,
+            still_running: true,
         };
 
         for m in moves {
@@ -68,6 +70,10 @@ impl OpeningDatabase {
 }
 
 impl<'a> GameState<'a> {
+    pub fn still_running(&self) -> bool {
+        self.still_running
+    }
+
     pub fn check_move(&self) -> MoveAssessment {
         if let Some(current) = self.current_move {
             if self
@@ -101,9 +107,11 @@ impl<'a> GameState<'a> {
 
     pub fn apply_move(&mut self, san: &SanPlus) -> MoveAssessment {
         let mut has_neighbors = false;
+        let mut possible_moves = vec![];
         if let Some(index) = self.current_move {
             for next in self.openings.neighbors_directed(index, Direction::Outgoing) {
                 has_neighbors = true;
+                possible_moves.push(&self.openings[next]);
                 if &self.openings[next] == san {
                     self.current_move = Some(next);
                     self.player_turn = !self.player_turn;
@@ -113,6 +121,7 @@ impl<'a> GameState<'a> {
         } else {
             for root in self.find_roots().iter() {
                 has_neighbors = true;
+                possible_moves.push(&self.openings[*root]);
                 if &self.openings[*root] == san {
                     self.current_move = Some(*root);
                     self.player_turn = !self.player_turn;
@@ -121,8 +130,19 @@ impl<'a> GameState<'a> {
             }
         }
         if has_neighbors {
+            let possible_moves = possible_moves
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            println!(
+                "You chose: {}. Instead you should have chose one of: {}",
+                san, possible_moves
+            );
+            self.still_running = false;
             MoveAssessment::OutOfPrep
         } else {
+            self.still_running = false;
             MoveAssessment::PrepEnded
         }
     }

@@ -7,7 +7,7 @@ pub struct EventSystem {
     pump: EventPump,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Event {
     /// Close the application
     Close,
@@ -58,6 +58,9 @@ impl EventSystem {
                 _e => {}
             }
         }
+        // I'm lazy and start practising should be at the end to make sure we don't start playing
+        // against our white prep as black
+        events.sort();
         events
     }
 }
