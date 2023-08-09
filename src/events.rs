@@ -5,22 +5,26 @@ use sdl2::EventPump;
 
 pub struct EventSystem {
     pump: EventPump,
-    should_close: bool,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Event {
+    /// Close the application
     Close,
+    /// Flips the board perspective
     FlipBoard,
+    /// Reset the board
     Reset,
+    /// Click somewhere on the screen
     MouseDown { x: i32, y: i32 },
+    /// Start playing through your prep
+    StartPractising,
 }
 
 impl EventSystem {
     pub fn new(sdl: sdl2::Sdl) -> anyhow::Result<Self> {
         Ok(Self {
             pump: sdl.event_pump().map_err(|e| anyhow!(e))?,
-            should_close: false,
         })
     }
 
@@ -39,6 +43,9 @@ impl EventSystem {
                     Some(Keycode::R) => {
                         events.push(Event::Reset);
                     }
+                    Some(Keycode::Space) => {
+                        events.push(Event::StartPractising);
+                    }
                     _ => {
                         println!("Unsupported key: {:?}", keycode);
                     }
@@ -51,6 +58,9 @@ impl EventSystem {
                 _e => {}
             }
         }
+        // I'm lazy and start practising should be at the end to make sure we don't start playing
+        // against our white prep as black
+        events.sort();
         events
     }
 }

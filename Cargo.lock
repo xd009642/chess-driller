@@ -1026,6 +1026,7 @@ dependencies = [
  "pgn-reader",
  "radix_trie",
  "sdl2",
+ "shakmaty",
  "walkdir",
 ]
 

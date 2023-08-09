@@ -1,21 +1,35 @@
 //! Store the opening preparation we want to work over - might rename it in future but it is kind
 //! of a mini stripped-down move database.
-use petgraph::dot::Dot;
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::Direction;
 use pgn_reader::{BufferedReader, SanPlus, Skip, Visitor};
-use std::collections::HashMap;
 use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use walkdir::WalkDir;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MoveAssessment {
+    /// You're still in prep
+    InPrep,
+    /// You've gone wrong somewhere
+    OutOfPrep,
+    /// Mission completed!
+    PrepEnded,
+}
 
 pub type OpeningGraph = Graph<SanPlus, ()>;
 
 #[derive(Default)]
 pub struct OpeningDatabase {
-    white_openings: HashMap<PathBuf, OpeningGraph>,
-    black_openings: HashMap<PathBuf, OpeningGraph>,
+    white_openings: OpeningGraph,
+    black_openings: OpeningGraph,
+}
+
+pub struct GameState<'a> {
+    openings: &'a OpeningGraph,
+    pub current_move: Option<NodeIndex>,
+    player_turn: bool,
+    still_running: bool,
 }
 
 impl OpeningDatabase {
@@ -32,10 +46,129 @@ impl OpeningDatabase {
             black_openings,
         })
     }
+
+    pub fn start_drill(&self, player: chess::Color, moves: &[SanPlus]) -> Option<GameState> {
+        let openings = match player {
+            chess::Color::White => &self.white_openings,
+            _ => &self.black_openings,
+        };
+        let mut state = GameState {
+            openings,
+            player_turn: player == chess::Color::White,
+            current_move: None,
+            still_running: true,
+        };
+
+        for m in moves {
+            let prep = state.apply_move(m);
+            if prep != MoveAssessment::InPrep {
+                return None;
+            }
+        }
+        Some(state)
+    }
 }
 
-fn load_folder(folder: &Path) -> anyhow::Result<HashMap<PathBuf, OpeningGraph>> {
-    let mut res = HashMap::new();
+impl<'a> GameState<'a> {
+    pub fn still_running(&self) -> bool {
+        self.still_running
+    }
+
+    pub fn check_move(&self) -> MoveAssessment {
+        if let Some(current) = self.current_move {
+            if self
+                .openings
+                .neighbors_directed(current, Direction::Outgoing)
+                .count()
+                > 0
+            {
+                MoveAssessment::InPrep
+            } else {
+                MoveAssessment::PrepEnded
+            }
+        } else {
+            MoveAssessment::OutOfPrep
+        }
+    }
+
+    pub fn make_move(&mut self) -> Option<SanPlus> {
+        let candidates = if let Some(index) = self.current_move {
+            self.openings
+                .neighbors_directed(index, Direction::Outgoing)
+                .collect::<Vec<NodeIndex>>()
+        } else {
+            self.find_roots()
+        };
+        let choice = fastrand::choice(candidates.iter())?;
+        self.current_move = Some(*choice);
+        self.player_turn = !self.player_turn;
+        Some(self.openings[*choice].clone())
+    }
+
+    pub fn apply_move(&mut self, san: &SanPlus) -> MoveAssessment {
+        let mut has_neighbors = false;
+        let mut possible_moves = vec![];
+        if let Some(index) = self.current_move {
+            for next in self.openings.neighbors_directed(index, Direction::Outgoing) {
+                has_neighbors = true;
+                possible_moves.push(&self.openings[next]);
+                if &self.openings[next] == san {
+                    self.current_move = Some(next);
+                    self.player_turn = !self.player_turn;
+                    return MoveAssessment::InPrep;
+                }
+            }
+        } else {
+            for root in self.find_roots().iter() {
+                has_neighbors = true;
+                possible_moves.push(&self.openings[*root]);
+                if &self.openings[*root] == san {
+                    self.current_move = Some(*root);
+                    self.player_turn = !self.player_turn;
+                    return MoveAssessment::InPrep;
+                }
+            }
+        }
+        if has_neighbors {
+            let possible_moves = possible_moves
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            println!(
+                "You chose: {}. Instead you should have chose one of: {}",
+                san, possible_moves
+            );
+            self.still_running = false;
+            MoveAssessment::OutOfPrep
+        } else {
+            self.still_running = false;
+            MoveAssessment::PrepEnded
+        }
+    }
+
+    pub fn is_player_turn(&self) -> bool {
+        self.player_turn
+    }
+
+    fn find_roots(&self) -> Vec<NodeIndex> {
+        let mut res = vec![];
+        for node in self.openings.node_indices() {
+            if self
+                .openings
+                .neighbors_directed(node, Direction::Incoming)
+                .count()
+                == 0
+            {
+                res.push(node);
+            }
+        }
+        res
+    }
+}
+
+fn load_folder(folder: &Path) -> anyhow::Result<OpeningGraph> {
+    let mut graph = OpeningGraph::default();
     for entry in WalkDir::new(folder)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -51,29 +184,34 @@ fn load_folder(folder: &Path) -> anyhow::Result<HashMap<PathBuf, OpeningGraph>> 
             }
         };
         let mut reader = BufferedReader::new(load);
-        let mut pgn_visitor = PgnVisitor::default();
+        let mut pgn_visitor = PgnVisitor::new_with_graph(graph);
         reader.read_game(&mut pgn_visitor)?;
 
-        // debugging we can print the graphs and see they're right!
-        // let pretty_graph = pgn_visitor.pgn.map(|_, node| node.to_string(), |_, _| ());
-        // let dot = Dot::new(&pretty_graph);
-        // println!("{:?}", dot);
-
-        // We should attempt to simplify to the minimum number of graphs (I think each graph should
-        // have a root of the same first move and then branch from there. Though in future if we
-        // want to support transpositions then making it into one giant graph is probably the
-        // smartest... hmmm graph merge algorithms.
-        //
-        // Until then returning each file in a map of PGN file -> Graph
-        res.insert(entry.path().to_path_buf(), pgn_visitor.pgn);
+        graph = pgn_visitor.pgn;
     }
-    Ok(res)
+
+    // debugging we can print the graphs and see they're right!
+    //let pretty_graph = graph.map(|_, node| node.to_string(), |_, _| ());
+    //let dot = Dot::new(&pretty_graph);
+    //println!("{:?}", dot);
+    Ok(graph)
 }
 
 #[derive(Default, Debug)]
 struct PgnVisitor {
     pgn: OpeningGraph,
     node_stack: Vec<NodeIndex>,
+    first: bool,
+}
+
+impl PgnVisitor {
+    pub fn new_with_graph(pgn: OpeningGraph) -> Self {
+        Self {
+            pgn,
+            node_stack: vec![],
+            first: true,
+        }
+    }
 }
 
 impl Visitor for PgnVisitor {
@@ -84,12 +222,40 @@ impl Visitor for PgnVisitor {
     }
 
     fn san(&mut self, san_plus: SanPlus) {
-        let node = self.pgn.add_node(san_plus);
-        if let Some(old_node) = self.node_stack.last_mut() {
-            self.pgn.add_edge(*old_node, node, ());
-            *old_node = node;
+        if self.first {
+            assert!(self.node_stack.is_empty());
+            self.first = false;
+            for node in self.pgn.node_indices() {
+                if self
+                    .pgn
+                    .neighbors_directed(node, Direction::Incoming)
+                    .count()
+                    == 0
+                {
+                    if self.pgn[node] == san_plus {
+                        self.node_stack.push(node);
+                    }
+                }
+            }
+            if self.node_stack.is_empty() {
+                let node = self.pgn.add_node(san_plus);
+                self.node_stack.push(node);
+            }
         } else {
-            self.node_stack.push(node);
+            if let Some(old_node) = self.node_stack.last_mut() {
+                for neighbor in self.pgn.neighbors_directed(*old_node, Direction::Outgoing) {
+                    if self.pgn[neighbor] == san_plus {
+                        self.node_stack.push(neighbor);
+                        return;
+                    }
+                }
+                let node = self.pgn.add_node(san_plus);
+                self.pgn.add_edge(*old_node, node, ());
+                *old_node = node;
+            } else {
+                let node = self.pgn.add_node(san_plus);
+                self.node_stack.push(node);
+            }
         }
     }
 
@@ -111,7 +277,6 @@ impl Visitor for PgnVisitor {
         } else {
             println!("No root?");
         }
-        println!("Node stack: {:?}", self.node_stack);
         Skip(false)
     }
 

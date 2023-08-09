@@ -18,6 +18,7 @@ For white:
 For black:
 
 * [Caro-Kann Advance Variation 1](https://lichess.org/study/VJb8YgoJ)
+* [Queens Gambit Declined (Variation 1+2)](https://lichess.org/study/rMrAjlAG)
 
 ## Plan
 
