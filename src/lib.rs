@@ -4,6 +4,7 @@ use chess::{Board, ChessMove};
 
 use sdl2::image::InitFlag;
 
+pub mod clients;
 pub mod db;
 pub mod events;
 pub mod game;
