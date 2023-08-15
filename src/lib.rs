@@ -1,8 +1,9 @@
 use crate::prelude::*;
 use anyhow::{anyhow, bail};
 use chess::{Board, ChessMove};
-
 use sdl2::image::InitFlag;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 pub mod clients;
 pub mod db;
@@ -14,6 +15,12 @@ pub mod prelude {
     pub use crate::db::*;
     pub use crate::events::*;
     pub use crate::render::*;
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct App {
+    chess_com_usernames: Vec<String>,
+    last_db: Option<PathBuf>,
 }
 
 pub fn run() -> anyhow::Result<()> {
