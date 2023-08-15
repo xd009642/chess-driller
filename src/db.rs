@@ -363,19 +363,30 @@ mod tests {
     #[test]
     fn load_multiline_pgn() {
         let mut graph = OpeningGraph::default();
-        let load = fs::File::open("games.pgn");
+        let load = fs::File::open("tests/resources/games.pgn");
         let load = match load {
             Ok(s) => s,
             Err(e) => {
                 panic!("Failed to load Error: {}", e);
             }
         };
-        let mut reader = BufferedReader::new(load);
-        let mut pgn_visitor = PgnVisitor::new_with_graph(graph);
-        reader.read_game(&mut pgn_visitor).unwrap();
 
-        reader.read_game(&mut pgn_visitor).unwrap();
+        let db = OpeningDatabase::load_multigame_pgn(load, "xd009642".to_string()).unwrap();
 
-        panic!("BOO");
+        // Lets make sure for white we have a QGD and for black a caro kann
+
+        let caro_kann = &[
+            SanPlus::from_ascii(b"e4").unwrap(),
+            SanPlus::from_ascii(b"c6").unwrap(),
+        ];
+        let state = db.start_drill(chess::Color::Black, caro_kann).unwrap();
+
+        let qgd = &[
+            SanPlus::from_ascii(b"d4").unwrap(),
+            SanPlus::from_ascii(b"d5").unwrap(),
+            SanPlus::from_ascii(b"c4").unwrap(),
+            SanPlus::from_ascii(b"e6").unwrap(),
+        ];
+        let state = db.start_drill(chess::Color::White, qgd).unwrap();
     }
 }
