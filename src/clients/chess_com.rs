@@ -4,6 +4,8 @@
 //!
 //! All PGNs for a month
 //! "https://api.chess.com/pub/player/$USER/games/$YEAR/$MONTH/pgn" year and month are numbers
+use crate::db::OpeningDatabase;
+use chrono::Datelike;
 use reqwest::blocking::*;
 use serde::Deserialize;
 
@@ -37,11 +39,39 @@ impl ChessComClient {
         Ok(resp.archives)
     }
 
-    pub fn download_pgn_archive(&self, user: &str, year: u16, month: u8) -> anyhow::Result<String> {
-        self.download_pgn(&format!(
-            "https://api.chess.com/pub/player/{}/games/{}/{}/pgn",
-            user, year, month
-        ))
+    pub fn download_pgn_archives_after(
+        &self,
+        user: &str,
+        year: u16,
+        month: u8,
+    ) -> anyhow::Result<OpeningDatabase> {
+        let current = chrono::Utc::now();
+
+        let mut db = OpeningDatabase::default();
+
+        for y in year..(current.year() as u16 + 1) {
+            let start_month = if y == year { month } else { 1 };
+            let end_month = if y == current.year() as u16 {
+                current.month() as u8 + 1
+            } else {
+                13
+            };
+            for m in start_month..end_month {
+                let pgn = self.download_pgn(&archive_url(user, y, m))?;
+                db.add_multigame_pgn(pgn.as_bytes(), user.to_string())?;
+            }
+        }
+        Ok(db)
+    }
+
+    pub fn download_pgn_archive(
+        &self,
+        user: &str,
+        year: u16,
+        month: u8,
+    ) -> anyhow::Result<OpeningDatabase> {
+        let pgn = self.download_pgn(&archive_url(user, year, month))?;
+        OpeningDatabase::load_multigame_pgn(pgn.as_bytes(), user.to_string())
     }
 
     pub fn download_pgn(&self, url: &str) -> anyhow::Result<String> {
@@ -49,4 +79,11 @@ impl ChessComClient {
 
         Ok(resp)
     }
+}
+
+fn archive_url(user: &str, year: u16, month: u8) -> String {
+    format!(
+        "https://api.chess.com/pub/player/{}/games/{}/{}/pgn",
+        user, year, month
+    )
 }

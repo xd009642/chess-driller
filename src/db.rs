@@ -69,18 +69,23 @@ impl OpeningDatabase {
     }
 
     pub fn load_multigame_pgn(pgns: impl io::Read, player: String) -> anyhow::Result<Self> {
-        let white = OpeningGraph::default();
-        let black = OpeningGraph::default();
+        let mut this = Self::default();
+        this.add_multigame_pgn(pgns, player)?;
+        Ok(this)
+    }
+
+    pub fn add_multigame_pgn(&mut self, pgns: impl io::Read, player: String) -> anyhow::Result<()> {
+        let white = self.white_openings.clone();
+        let black = self.black_openings.clone();
         let mut reader = BufferedReader::new(pgns);
 
         let mut visitor = PgnVisitor::new_game_recorder(white, black, player);
         while reader.has_more()? {
             reader.read_game(&mut visitor)?;
         }
-        Ok(Self {
-            white_openings: visitor.pgn,
-            black_openings: visitor.backup_pgn.unwrap(),
-        })
+        self.white_openings = visitor.pgn;
+        self.black_openings = visitor.backup_pgn.unwrap();
+        Ok(())
     }
 }
 
@@ -362,7 +367,6 @@ mod tests {
 
     #[test]
     fn load_multiline_pgn() {
-        let mut graph = OpeningGraph::default();
         let load = fs::File::open("tests/resources/games.pgn");
         let load = match load {
             Ok(s) => s,
@@ -379,7 +383,7 @@ mod tests {
             SanPlus::from_ascii(b"e4").unwrap(),
             SanPlus::from_ascii(b"c6").unwrap(),
         ];
-        let state = db.start_drill(chess::Color::Black, caro_kann).unwrap();
+        let _state = db.start_drill(chess::Color::Black, caro_kann).unwrap();
 
         let qgd = &[
             SanPlus::from_ascii(b"d4").unwrap(),
@@ -387,6 +391,6 @@ mod tests {
             SanPlus::from_ascii(b"c4").unwrap(),
             SanPlus::from_ascii(b"e6").unwrap(),
         ];
-        let state = db.start_drill(chess::Color::White, qgd).unwrap();
+        let _state = db.start_drill(chess::Color::White, qgd).unwrap();
     }
 }
