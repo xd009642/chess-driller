@@ -6,12 +6,14 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 pub mod clients;
+pub mod config;
 pub mod db;
 pub mod events;
 pub mod game;
 pub mod render;
 
 pub mod prelude {
+    pub use crate::config::*;
     pub use crate::db::*;
     pub use crate::events::*;
     pub use crate::render::*;
@@ -24,6 +26,7 @@ pub struct App {
 }
 
 pub fn run() -> anyhow::Result<()> {
+    let config = Config::load()?;
     let database = OpeningDatabase::load_default()?;
     let ctx = sdl2::init().map_err(|e| anyhow!(e))?;
     let width = 600;
