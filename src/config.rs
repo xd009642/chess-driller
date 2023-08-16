@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Chess.com usernames for the user
     #[serde(rename = "chess.com")]
-    chess_com: Vec<String>,
+    pub chess_com: Vec<String>,
 }
 
 impl Config {
@@ -42,5 +42,12 @@ impl Config {
             eprintln!("Failed to write out config file: {}", e);
         }
         res
+    }
+
+    pub fn data_dir(&self) -> PathBuf {
+        dirs::config_dir()
+            .unwrap_or_default()
+            .join("chess-driller")
+            .join("data")
     }
 }

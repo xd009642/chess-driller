@@ -13,6 +13,7 @@ pub mod game;
 pub mod render;
 
 pub mod prelude {
+    pub use crate::clients::chess_com::*;
     pub use crate::config::*;
     pub use crate::db::*;
     pub use crate::events::*;
@@ -27,6 +28,8 @@ pub struct App {
 
 pub fn run() -> anyhow::Result<()> {
     let config = Config::load()?;
+    let chess_dot_com = ChessComClient::new();
+    let _user_games = chess_dot_com.download_all_games(&config);
     let database = OpeningDatabase::load_default()?;
     let ctx = sdl2::init().map_err(|e| anyhow!(e))?;
     let width = 600;
