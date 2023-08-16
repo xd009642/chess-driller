@@ -9,6 +9,7 @@ use crate::db::OpeningDatabase;
 use chrono::Datelike;
 use reqwest::blocking::*;
 use serde::Deserialize;
+use std::borrow::Cow;
 use std::fs;
 
 #[derive(Clone)]
@@ -50,8 +51,18 @@ impl ChessComClient {
                 fs::create_dir_all(&user_folder).unwrap();
             }
             for (i, archive) in archives.iter().enumerate() {
+                let archive = if archive.ends_with("/pgn") {
+                    Cow::Borrowed(archive)
+                } else {
+                    let mut s = archive.to_string();
+                    if !s.ends_with("/") {
+                        s.push('/');
+                    }
+                    s.push_str("pgn");
+                    Cow::Owned(s)
+                };
                 println!("Processing archive: {}", archive);
-                let pgn = match self.download_pgn(archive) {
+                let pgn = match self.download_pgn(archive.as_ref()) {
                     Ok(pgn) => pgn,
                     Err(e) => {
                         eprintln!("Error downloading: {}", e);

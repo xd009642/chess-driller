@@ -267,7 +267,6 @@ impl Visitor for PgnVisitor {
 
             if let Ok(pgn_player) = std::str::from_utf8(value.0) {
                 if pgn_player == player {
-                    println!("Recording: {:?} game for player", color_key);
                     self.store_in_backup = color_key == chess::Color::Black;
                 }
             }
