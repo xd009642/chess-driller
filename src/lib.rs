@@ -68,8 +68,14 @@ pub fn run() -> anyhow::Result<()> {
     let mut game_state: Option<GameState> = None;
     let mut drag_context = None;
     let mut pending_promotion_square = None;
+    let mut promotion_from = None;
     while running {
-        window.render(&board, selected_square, drag_context);
+        window.render(
+            &board,
+            selected_square,
+            drag_context,
+            pending_promotion_square,
+        );
 
         if let Some(square) = pending_promotion_square {
             window.render_promotion_picker(square);
@@ -92,7 +98,49 @@ pub fn run() -> anyhow::Result<()> {
                     board = Board::default();
                 }
                 EventKind::MouseClick { x, y } => {
-                    if let Some(square) = window.get_square(x, y) {
+                    dbg!(promotion_from, pending_promotion_square);
+                    if let Some((promotion_square, sel_square)) =
+                        pending_promotion_square.zip(promotion_from)
+                    {
+                        println!("aaa");
+                        let promotion_file = promotion_square.get_file().to_index() as i32;
+                        let promotion_rank = promotion_square.get_rank().to_index() as i32;
+
+                        if let Some(square) = window.get_square(x, y) {
+                            let square_file = square.get_file().to_index() as i32;
+                            let square_rank = square.get_rank().to_index() as i32;
+                            let file_offset = if promotion_file == 7 { -1 } else { 1 };
+                            let rank_offset = if promotion_rank == 0 { -1 } else { 1 };
+                            let mut piece = chess::Piece::Queen;
+
+                            dbg!(square_file + file_offset, promotion_file);
+                            dbg!(square_rank, promotion_rank, rank_offset);
+
+                            if square_file == promotion_file + file_offset {
+                                if square_rank == promotion_rank {
+                                    piece = chess::Piece::Queen;
+                                } else if square_rank == promotion_rank - rank_offset {
+                                    piece = chess::Piece::Rook;
+                                } else if square_rank == promotion_rank - rank_offset * 2 {
+                                    piece = chess::Piece::Bishop;
+                                } else if square_rank == promotion_rank - rank_offset * 3 {
+                                    piece = chess::Piece::Knight;
+                                }
+
+                                let candidate_move =
+                                    ChessMove::new(sel_square, promotion_square, Some(piece));
+
+                                dbg!(&candidate_move);
+                                if board.legal(candidate_move) {
+                                    board = board.make_move_new(candidate_move);
+                                }
+                            }
+                        }
+
+                        selected_square = None;
+                        pending_promotion_square = None;
+                        promotion_from = None;
+                    } else if let Some(square) = window.get_square(x, y) {
                         if let Some(s) = selected_square {
                             let candidate_move = ChessMove::new(s, square, None);
                             if board.legal(candidate_move) {
@@ -179,6 +227,12 @@ pub fn run() -> anyhow::Result<()> {
                             };
                             let candidate_move = ChessMove::new(src_square, dst_square, promotion);
                             if board.legal(candidate_move) {
+                                if promotion.is_some() {
+                                    pending_promotion_square = Some(dst_square);
+                                    promotion_from = Some(src_square);
+                                    continue;
+                                }
+
                                 board = board.make_move_new(candidate_move);
                                 selected_square = None;
                             } else {
