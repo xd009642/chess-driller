@@ -11,6 +11,7 @@ use reqwest::blocking::*;
 use serde::Deserialize;
 use std::borrow::Cow;
 use std::fs;
+use tracing::{error, info};
 
 #[derive(Clone)]
 pub struct ChessComClient {
@@ -39,13 +40,13 @@ impl ChessComClient {
             let archives = match self.get_user_archives(user) {
                 Ok(a) => a,
                 Err(e) => {
-                    eprintln!("Couldn't get player archives for {}: {}", user, e);
+                    error!("Couldn't get player archives for {}: {}", user, e);
                     continue;
                 }
             };
             let user_folder = chess_com_games.join(user);
             if user_folder.exists() {
-                println!("Skipping download you already have games for {}", user);
+                info!("Skipping download you already have games for {}", user);
                 continue;
             } else {
                 fs::create_dir_all(&user_folder).unwrap();
@@ -61,19 +62,19 @@ impl ChessComClient {
                     s.push_str("pgn");
                     Cow::Owned(s)
                 };
-                println!("Processing archive: {}", archive);
+                info!("Processing archive: {}", archive);
                 let pgn = match self.download_pgn(archive.as_ref()) {
                     Ok(pgn) => pgn,
                     Err(e) => {
-                        eprintln!("Error downloading: {}", e);
+                        error!("downloading: {}", e);
                         continue;
                     }
                 };
                 if let Err(e) = fs::write(user_folder.join(format!("{}.pgn", i)), pgn.as_bytes()) {
-                    eprintln!("Failed to cache in config dir: {}", e);
+                    error!("Failed to cache in config dir: {}", e);
                 }
                 if let Err(e) = db.add_multigame_pgn(pgn.as_bytes(), user.to_string()) {
-                    eprintln!("Failed to add to opening tree: {}", e);
+                    error!("Failed to add to opening tree: {}", e);
                 }
             }
         }

@@ -5,6 +5,7 @@ use petgraph::Direction;
 use pgn_reader::{BufferedReader, SanPlus, Skip, Visitor};
 use std::path::Path;
 use std::{fs, io};
+use tracing::{error, info, warn};
 use walkdir::WalkDir;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -155,7 +156,7 @@ impl<'a> GameState<'a> {
                 .map(|x| x.to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
-            println!(
+            info!(
                 "You chose: {}. Instead you should have chose one of: {}",
                 san, possible_moves
             );
@@ -194,12 +195,12 @@ fn load_folder(folder: &Path) -> anyhow::Result<OpeningGraph> {
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
     {
-        println!("Loading: {}", entry.path().display());
+        info!("Loading: {}", entry.path().display());
         let load = fs::File::open(entry.path());
         let load = match load {
             Ok(s) => s,
             Err(e) => {
-                println!("Failed to load {}. Error: {}", entry.path().display(), e);
+                error!("Failed to load {}. Error: {}", entry.path().display(), e);
                 continue;
             }
         };
@@ -212,7 +213,7 @@ fn load_folder(folder: &Path) -> anyhow::Result<OpeningGraph> {
 
     // debugging we can print the graphs and see they're right!
     //let pretty_graph = graph.map(|_, node| node.to_string(), |_, _| ());
-    //let dot = Dot::new(&pretty_graph);
+    //let dot = petgraph::dot::Dot::new(&pretty_graph);
     //println!("{:?}", dot);
     Ok(graph)
 }
@@ -284,8 +285,7 @@ impl Visitor for PgnVisitor {
             match self.backup_pgn.as_mut() {
                 Some(s) => s,
                 None => {
-                    eprintln!("Trying to filter on player but no black graph!?");
-                    return;
+                    panic!("Trying to filter on player but no black graph!?");
                 }
             }
         } else {
@@ -328,8 +328,7 @@ impl Visitor for PgnVisitor {
             match self.backup_pgn.as_mut() {
                 Some(s) => s,
                 None => {
-                    eprintln!("Trying to filter on player but no black graph!?");
-                    return Skip(true);
+                    panic!("Trying to filter on player but no black graph!?");
                 }
             }
         } else {
@@ -343,13 +342,13 @@ impl Visitor for PgnVisitor {
                 .neighbors_directed(*last, Direction::Incoming)
                 .collect::<Vec<NodeIndex>>();
             if parents.len() > 1 {
-                println!("Unexpected extra parents!?");
+                warn!("Unexpected extra parents!?");
             }
             if !parents.is_empty() {
                 self.node_stack.push(parents[0]);
             }
         } else {
-            println!("No root?");
+            warn!("No root?");
         }
         Skip(false)
     }

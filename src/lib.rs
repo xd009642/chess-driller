@@ -4,6 +4,7 @@ use chess::{Board, ChessMove};
 use sdl2::image::InitFlag;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use tracing::info;
 
 pub mod clients;
 pub mod config;
@@ -57,7 +58,7 @@ pub fn run() -> anyhow::Result<()> {
     let mut board = Board::default();
     // Just putting here to decide if we want to store the openings as a graph of `Board` because
     // that might be fast and simple :thinking:
-    println!("Board is: {} bytes in memory", std::mem::size_of::<Board>());
+    info!("Board is: {} bytes in memory", std::mem::size_of::<Board>());
 
     // Without changing the graph structure we need to start tracking the moves from the very
     // beginning for both white and black - so we'll have a node-index into both.
@@ -72,13 +73,14 @@ pub fn run() -> anyhow::Result<()> {
         for event in &pending_events {
             match event {
                 Event::Close => {
-                    println!("Closing");
+                    info!("Closing");
                     running = false;
                 }
                 Event::FlipBoard => {
                     window.flip();
                 }
                 Event::Reset => {
+                    san_moves.clear();
                     game_state = None;
                     board = Board::default();
                 }
@@ -88,26 +90,26 @@ pub fn run() -> anyhow::Result<()> {
                             let candidate_move = ChessMove::new(s, square, None);
                             if board.legal(candidate_move) {
                                 if let Some(san) = game::get_san(candidate_move, &board) {
-                                    println!("{}", san);
+                                    info!("{}", san);
                                     board = board.make_move_new(candidate_move);
                                     if let Some(state) = game_state.as_mut() {
                                         let prep_status = state.apply_move(&san);
                                         if prep_status == MoveAssessment::InPrep {
                                             if let Some(mv) = state.make_move() {
                                                 let text = mv.to_string();
-                                                println!("{}", text);
+                                                info!("{}", text);
                                                 board = board.make_move_new(
                                                     ChessMove::from_san(&board, &text).unwrap(),
                                                 );
                                             }
                                         } else {
-                                            println!("You've hit the end: {:?}", prep_status);
+                                            info!("You've hit the end: {:?}", prep_status);
                                         }
                                     } else {
                                         san_moves.push(san);
                                     }
                                 } else {
-                                    println!("Something went wrong didn't record this move");
+                                    info!("Something went wrong didn't record this move");
                                 }
                                 selected_square = None;
                             } else {
@@ -123,18 +125,18 @@ pub fn run() -> anyhow::Result<()> {
                         if state.still_running() {
                             continue;
                         }
+                        board = Board::default();
                     }
                     game_state = None;
-                    board = Board::default();
-                    println!("Lets start playing!");
+                    info!("Lets start playing!");
                     game_state = database.start_drill(window.player(), &san_moves);
                     if let Some(state) = game_state.as_mut() {
                         if !state.is_player_turn() {
-                            println!("Not the players turn, lets make a move");
+                            info!("Not the players turn, lets make a move");
                             if let Some(mv) = state.make_move() {
-                                println!("I made a move?");
+                                info!("I made a move?");
                                 let text = mv.to_string();
-                                println!("{}", text);
+                                info!("{}", text);
                                 board = board
                                     .make_move_new(ChessMove::from_san(&board, &text).unwrap());
                             }
