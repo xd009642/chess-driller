@@ -84,8 +84,14 @@ impl OpeningDatabase {
         while reader.has_more()? {
             reader.read_game(&mut visitor)?;
         }
-        self.white_openings = visitor.pgn;
-        self.black_openings = visitor.backup_pgn.unwrap();
+
+        match visitor.pgn {
+            Pgn::Dual { white, black } => {
+                self.white_openings = white;
+                self.black_openings = black;
+            }
+            _ => panic!("Didn't get our opening tree for white and black"),
+        };
         Ok(())
     }
 }
@@ -208,22 +214,41 @@ fn load_folder(folder: &Path) -> anyhow::Result<OpeningGraph> {
         let mut pgn_visitor = PgnVisitor::new_with_graph(graph);
         reader.read_game(&mut pgn_visitor)?;
 
-        graph = pgn_visitor.pgn;
+        graph = match pgn_visitor.pgn {
+            Pgn::Single { player } => player,
+            _ => unreachable!(),
+        }
     }
 
     // debugging we can print the graphs and see they're right!
-    //let pretty_graph = graph.map(|_, node| node.to_string(), |_, _| ());
-    //let dot = petgraph::dot::Dot::new(&pretty_graph);
-    //println!("{:?}", dot);
+    let pretty_graph = graph.map(|_, node| node.to_string(), |_, _| ());
+    let dot = petgraph::dot::Dot::new(&pretty_graph);
+    println!("{:?}", dot);
     Ok(graph)
+}
+
+#[derive(Debug)]
+enum Pgn {
+    Dual {
+        white: OpeningGraph,
+        black: OpeningGraph,
+    },
+    Single {
+        player: OpeningGraph,
+    },
+}
+
+impl Default for Pgn {
+    fn default() -> Self {
+        Self::Single {
+            player: Default::default(),
+        }
+    }
 }
 
 #[derive(Default, Debug)]
 struct PgnVisitor {
-    /// If backup is present this is white!
-    pgn: OpeningGraph,
-    /// Stores black
-    backup_pgn: Option<OpeningGraph>,
+    pgn: Pgn,
     node_stack: Vec<NodeIndex>,
     first: bool,
     /// Used to show if we want to filter on player
@@ -232,10 +257,9 @@ struct PgnVisitor {
 }
 
 impl PgnVisitor {
-    pub fn new_with_graph(pgn: OpeningGraph) -> Self {
+    pub fn new_with_graph(player: OpeningGraph) -> Self {
         Self {
-            pgn,
-            backup_pgn: None,
+            pgn: Pgn::Single { player },
             node_stack: vec![],
             first: true,
             player: None,
@@ -245,8 +269,7 @@ impl PgnVisitor {
 
     pub fn new_game_recorder(white: OpeningGraph, black: OpeningGraph, player: String) -> Self {
         Self {
-            pgn: white,
-            backup_pgn: Some(black),
+            pgn: Pgn::Dual { white, black },
             player: Some(player),
             first: true,
             node_stack: vec![],
@@ -281,15 +304,13 @@ impl Visitor for PgnVisitor {
     }
 
     fn san(&mut self, san_plus: SanPlus) {
-        let pgn = if self.store_in_backup {
-            match self.backup_pgn.as_mut() {
-                Some(s) => s,
-                None => {
-                    panic!("Trying to filter on player but no black graph!?");
-                }
+        let pgn = match &mut self.pgn {
+            Pgn::Dual { black, .. } if self.store_in_backup => black,
+            Pgn::Single { .. } if self.store_in_backup => {
+                panic!("Trying to filter on player but no black graph!?")
             }
-        } else {
-            &mut self.pgn
+            Pgn::Single { player } => player,
+            Pgn::Dual { white, .. } => white,
         };
         if self.first {
             assert!(self.node_stack.is_empty());
@@ -324,15 +345,13 @@ impl Visitor for PgnVisitor {
     }
 
     fn begin_variation(&mut self) -> Skip {
-        let pgn = if self.store_in_backup {
-            match self.backup_pgn.as_mut() {
-                Some(s) => s,
-                None => {
-                    panic!("Trying to filter on player but no black graph!?");
-                }
+        let pgn = match &mut self.pgn {
+            Pgn::Dual { black, .. } if self.store_in_backup => black,
+            Pgn::Single { .. } if self.store_in_backup => {
+                panic!("Trying to filter on player but no black graph!?")
             }
-        } else {
-            &mut self.pgn
+            Pgn::Single { player } => player,
+            Pgn::Dual { white, .. } => white,
         };
         // Variation is an alternative for last move pushed so we want to join to two moves back
         // This won't work well with variations right at the start (should probably be
@@ -390,5 +409,10 @@ mod tests {
             SanPlus::from_ascii(b"e6").unwrap(),
         ];
         let _state = db.start_drill(chess::Color::White, qgd).unwrap();
+    }
+
+    #[test]
+    fn load_test_prep() {
+        OpeningDatabase::load(Path::new("prep")).unwrap();
     }
 }
