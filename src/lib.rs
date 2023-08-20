@@ -74,12 +74,8 @@ pub fn run() -> anyhow::Result<()> {
             &board,
             selected_square,
             drag_context,
-            pending_promotion_square,
+            promotion_from.zip(pending_promotion_square),
         );
-
-        if let Some(square) = pending_promotion_square {
-            window.render_promotion_picker(square);
-        }
 
         let pending_events = events.handle_events();
 
@@ -98,11 +94,9 @@ pub fn run() -> anyhow::Result<()> {
                     board = Board::default();
                 }
                 EventKind::MouseClick { x, y } => {
-                    dbg!(promotion_from, pending_promotion_square);
                     if let Some((promotion_square, sel_square)) =
                         pending_promotion_square.zip(promotion_from)
                     {
-                        println!("aaa");
                         let promotion_file = promotion_square.get_file().to_index() as i32;
                         let promotion_rank = promotion_square.get_rank().to_index() as i32;
 
@@ -112,9 +106,6 @@ pub fn run() -> anyhow::Result<()> {
                             let file_offset = if promotion_file == 7 { -1 } else { 1 };
                             let rank_offset = if promotion_rank == 0 { -1 } else { 1 };
                             let mut piece = chess::Piece::Queen;
-
-                            dbg!(square_file + file_offset, promotion_file);
-                            dbg!(square_rank, promotion_rank, rank_offset);
 
                             if square_file == promotion_file + file_offset {
                                 if square_rank == promotion_rank {
@@ -130,7 +121,6 @@ pub fn run() -> anyhow::Result<()> {
                                 let candidate_move =
                                     ChessMove::new(sel_square, promotion_square, Some(piece));
 
-                                dbg!(&candidate_move);
                                 if board.legal(candidate_move) {
                                     board = board.make_move_new(candidate_move);
                                 }

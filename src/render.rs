@@ -24,7 +24,6 @@ pub struct RenderSystem<'s> {
     flipped: bool,
     square_size: u32,
     canvas: &'s mut Canvas<Window>,
-    texture_creator: &'s TextureCreator<WindowContext>,
     width: u32,
     main_texture: Texture<'s>,
     sprites: HashMap<(Piece, SquareColor), Texture<'s>>,
@@ -118,7 +117,6 @@ impl<'s> RenderSystem<'s> {
             flipped,
             square_size: width / 8,
             canvas,
-            texture_creator,
             width,
             main_texture,
             sprites,
@@ -144,13 +142,21 @@ impl<'s> RenderSystem<'s> {
         board: &Board,
         selected_square: Option<Square>,
         drag_context: Option<DragContext>,
-        promotion_square: Option<Square>,
+        promotion_from_to: Option<(Square, Square)>,
     ) {
         self.draw_board(selected_square);
-        self.draw_pieces(board, selected_square, drag_context, promotion_square);
+        self.draw_pieces(
+            board,
+            selected_square,
+            drag_context,
+            promotion_from_to.map(|(_, to)| to),
+        );
 
-        if let Some(promotion_square) = promotion_square {
-            self.render_promotion_picker(promotion_square);
+        if let Some((from, to)) = promotion_from_to {
+            self.render_promotion_picker(
+                to,
+                board.color_on(from).expect("no piece on promotion square?"),
+            );
         }
 
         self.canvas
@@ -183,13 +189,7 @@ impl<'s> RenderSystem<'s> {
                         }
 
                         let color = board.color_on(square).unwrap();
-
-                        let mut rank = square.get_rank().to_index() as u32;
-                        if !self.flipped {
-                            rank = 7 - rank;
-                        }
-                        let file = square.get_file().to_index() as u32;
-
+                        let (rank, file) = Self::rank_and_file(self.flipped, square);
                         let sprite = &self.sprites[&(piece, color)];
 
                         canvas
@@ -210,13 +210,7 @@ impl<'s> RenderSystem<'s> {
                 if let Some((active_promotion, square)) = active_promotion.zip(selected_square) {
                     if let Some(piece) = board.piece_on(square) {
                         let color = board.color_on(square).unwrap();
-
-                        let mut rank = active_promotion.get_rank().to_index() as u32;
-                        if !self.flipped {
-                            rank = 7 - rank;
-                        }
-                        let file = active_promotion.get_file().to_index() as u32;
-
+                        let (rank, file) = Self::rank_and_file(self.flipped, active_promotion);
                         let sprite = &self.sprites[&(piece, color)];
 
                         canvas
@@ -263,6 +257,7 @@ impl<'s> RenderSystem<'s> {
                 } else {
                     canvas.set_draw_color(DARK_SQUARE);
                 }
+
                 canvas.clear();
 
                 if self.flipped {
@@ -301,12 +296,7 @@ impl<'s> RenderSystem<'s> {
 
                     canvas.set_draw_color(selected_color);
 
-                    let mut rank = square.get_rank().to_index() as u32;
-                    if !self.flipped {
-                        rank = 7 - rank;
-                    }
-                    let file = square.get_file().to_index() as u32;
-
+                    let (rank, file) = Self::rank_and_file(self.flipped, square);
                     let rect = Rect::new(
                         (file * self.square_size) as i32,
                         (rank * self.square_size) as i32,
@@ -320,7 +310,7 @@ impl<'s> RenderSystem<'s> {
             .unwrap();
     }
 
-    pub fn render_promotion_picker(&mut self, square: Square) {
+    pub fn render_promotion_picker(&mut self, square: Square, color: chess::Color) {
         self.main_texture
             .set_blend_mode(sdl2::render::BlendMode::Blend);
         self.canvas
@@ -332,14 +322,7 @@ impl<'s> RenderSystem<'s> {
                     .unwrap();
                 canvas.set_draw_color(Color::RGB(0xFF, 0xFF, 0xFF));
 
-                let mut rank = square.get_rank().to_index() as u32;
-                let mut file = square.get_file().to_index() as u32;
-                if !self.flipped {
-                    rank = 7 - rank;
-                } else {
-                    file = 7 - file;
-                }
-
+                let (rank, file) = Self::rank_and_file(self.flipped, square);
                 let offset = if file == 7 { -1i32 } else { 1 };
 
                 for (i, piece) in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight]
@@ -354,8 +337,6 @@ impl<'s> RenderSystem<'s> {
                         _ => unreachable!(),
                     };
 
-                    // let rank = if self.flipped { 7 - rank } else { rank };
-
                     let rect = Rect::new(
                         (file as i32 + offset) * self.square_size as i32,
                         (rank as i32 + i) * self.square_size as i32,
@@ -367,7 +348,7 @@ impl<'s> RenderSystem<'s> {
 
                     canvas
                         .copy(
-                            self.sprites.get(&(piece, chess::Color::White)).unwrap(),
+                            self.sprites.get(&(piece, color)).unwrap(),
                             None,
                             Rect::new(
                                 (file as i32 + offset) * self.square_size as i32,
@@ -400,5 +381,18 @@ impl<'s> RenderSystem<'s> {
         let file = File::from_index(norm_x as usize);
 
         Some(Square::make_square(rank, file))
+    }
+
+    // FIXME: this can't be a method because of the `.with_texture_canvas` calls
+    fn rank_and_file(flipped: bool, square: Square) -> (u32, u32) {
+        let mut rank = square.get_rank().to_index() as u32;
+        let mut file = square.get_file().to_index() as u32;
+        if !flipped {
+            rank = 7 - rank;
+        } else {
+            file = 7 - file;
+        }
+
+        (rank, file)
     }
 }
