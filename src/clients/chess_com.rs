@@ -6,6 +6,7 @@
 //! "https://api.chess.com/pub/player/$USER/games/$YEAR/$MONTH/pgn" year and month are numbers
 use crate::config::Config;
 use crate::db::OpeningDatabase;
+use anyhow::Context;
 use chrono::Datelike;
 use reqwest::blocking::*;
 use serde::Deserialize;
@@ -33,7 +34,7 @@ impl ChessComClient {
         }
     }
 
-    pub fn download_all_games(&self, config: &Config) -> OpeningDatabase {
+    pub fn download_all_games(&self, config: &Config) -> anyhow::Result<OpeningDatabase> {
         let mut db = OpeningDatabase::default();
         let chess_com_games = config.data_dir().join("chess.com");
         for user in &config.chess_com {
@@ -70,15 +71,16 @@ impl ChessComClient {
                         continue;
                     }
                 };
-                if let Err(e) = fs::write(user_folder.join(format!("{}.pgn", i)), pgn.as_bytes()) {
-                    error!("Failed to cache in config dir: {}", e);
-                }
+
+                fs::write(user_folder.join(format!("{}.pgn", i)), pgn.as_bytes())
+                    .context("Failed to cache in config dir")?;
+
                 if let Err(e) = db.add_multigame_pgn(pgn.as_bytes(), user.to_string()) {
                     error!("Failed to add to opening tree: {}", e);
                 }
             }
         }
-        db
+        Ok(db)
     }
 
     pub fn get_user_archives(&self, user: &str) -> anyhow::Result<Vec<String>> {
