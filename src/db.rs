@@ -3,8 +3,9 @@
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::Direction;
 use pgn_reader::{BufferedReader, SanPlus, Skip, Visitor};
-use std::fs;
 use std::path::Path;
+use std::{fs, io};
+use tracing::{error, info, warn};
 use walkdir::WalkDir;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -66,6 +67,32 @@ impl OpeningDatabase {
             }
         }
         Some(state)
+    }
+
+    pub fn load_multigame_pgn(pgns: impl io::Read, player: String) -> anyhow::Result<Self> {
+        let mut this = Self::default();
+        this.add_multigame_pgn(pgns, player)?;
+        Ok(this)
+    }
+
+    pub fn add_multigame_pgn(&mut self, pgns: impl io::Read, player: String) -> anyhow::Result<()> {
+        let white = self.white_openings.clone();
+        let black = self.black_openings.clone();
+        let mut reader = BufferedReader::new(pgns);
+
+        let mut visitor = PgnVisitor::new_game_recorder(white, black, player);
+        while reader.has_more()? {
+            reader.read_game(&mut visitor)?;
+        }
+
+        match visitor.pgn {
+            Pgn::Dual { white, black } => {
+                self.white_openings = white;
+                self.black_openings = black;
+            }
+            _ => panic!("Didn't get our opening tree for white and black"),
+        };
+        Ok(())
     }
 }
 
@@ -135,7 +162,7 @@ impl<'a> GameState<'a> {
                 .map(|x| x.to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
-            println!(
+            info!(
                 "You chose: {}. Instead you should have chose one of: {}",
                 san, possible_moves
             );
@@ -174,12 +201,12 @@ fn load_folder(folder: &Path) -> anyhow::Result<OpeningGraph> {
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
     {
-        println!("Loading: {}", entry.path().display());
+        info!("Loading: {}", entry.path().display());
         let load = fs::File::open(entry.path());
         let load = match load {
             Ok(s) => s,
             Err(e) => {
-                println!("Failed to load {}. Error: {}", entry.path().display(), e);
+                error!("Failed to load {}. Error: {}", entry.path().display(), e);
                 continue;
             }
         };
@@ -187,29 +214,66 @@ fn load_folder(folder: &Path) -> anyhow::Result<OpeningGraph> {
         let mut pgn_visitor = PgnVisitor::new_with_graph(graph);
         reader.read_game(&mut pgn_visitor)?;
 
-        graph = pgn_visitor.pgn;
+        graph = match pgn_visitor.pgn {
+            Pgn::Single { player } => player,
+            _ => unreachable!(),
+        }
     }
 
     // debugging we can print the graphs and see they're right!
-    //let pretty_graph = graph.map(|_, node| node.to_string(), |_, _| ());
-    //let dot = Dot::new(&pretty_graph);
-    //println!("{:?}", dot);
+    let pretty_graph = graph.map(|_, node| node.to_string(), |_, _| ());
+    let dot = petgraph::dot::Dot::new(&pretty_graph);
+    println!("{:?}", dot);
     Ok(graph)
+}
+
+#[derive(Debug)]
+enum Pgn {
+    Dual {
+        white: OpeningGraph,
+        black: OpeningGraph,
+    },
+    Single {
+        player: OpeningGraph,
+    },
+}
+
+impl Default for Pgn {
+    fn default() -> Self {
+        Self::Single {
+            player: Default::default(),
+        }
+    }
 }
 
 #[derive(Default, Debug)]
 struct PgnVisitor {
-    pgn: OpeningGraph,
+    pgn: Pgn,
     node_stack: Vec<NodeIndex>,
     first: bool,
+    /// Used to show if we want to filter on player
+    player: Option<String>,
+    store_in_backup: bool,
 }
 
 impl PgnVisitor {
-    pub fn new_with_graph(pgn: OpeningGraph) -> Self {
+    pub fn new_with_graph(player: OpeningGraph) -> Self {
         Self {
-            pgn,
+            pgn: Pgn::Single { player },
             node_stack: vec![],
             first: true,
+            player: None,
+            store_in_backup: false,
+        }
+    }
+
+    pub fn new_game_recorder(white: OpeningGraph, black: OpeningGraph, player: String) -> Self {
+        Self {
+            pgn: Pgn::Dual { white, black },
+            player: Some(player),
+            first: true,
+            node_stack: vec![],
+            store_in_backup: false,
         }
     }
 }
@@ -217,65 +281,93 @@ impl PgnVisitor {
 impl Visitor for PgnVisitor {
     type Result = ();
 
+    fn header(&mut self, key: &[u8], value: pgn_reader::RawHeader) {
+        if let Some(player) = self.player.as_ref() {
+            let color_key = match std::str::from_utf8(key) {
+                Ok("White") => chess::Color::White,
+                Ok("Black") => chess::Color::Black,
+                _ => return,
+            };
+
+            if let Ok(pgn_player) = std::str::from_utf8(value.0) {
+                if pgn_player == player {
+                    self.store_in_backup = color_key == chess::Color::Black;
+                }
+            }
+        }
+    }
+
     fn end_game(&mut self) -> Self::Result {
+        self.node_stack.clear();
+        self.first = true;
         ()
     }
 
     fn san(&mut self, san_plus: SanPlus) {
+        let pgn = match &mut self.pgn {
+            Pgn::Dual { black, .. } if self.store_in_backup => black,
+            Pgn::Single { .. } if self.store_in_backup => {
+                panic!("Trying to filter on player but no black graph!?")
+            }
+            Pgn::Single { player } => player,
+            Pgn::Dual { white, .. } => white,
+        };
         if self.first {
             assert!(self.node_stack.is_empty());
             self.first = false;
-            for node in self.pgn.node_indices() {
-                if self
-                    .pgn
-                    .neighbors_directed(node, Direction::Incoming)
-                    .count()
-                    == 0
-                {
-                    if self.pgn[node] == san_plus {
+            for node in pgn.node_indices() {
+                if pgn.neighbors_directed(node, Direction::Incoming).count() == 0 {
+                    if pgn[node] == san_plus {
                         self.node_stack.push(node);
                     }
                 }
             }
             if self.node_stack.is_empty() {
-                let node = self.pgn.add_node(san_plus);
+                let node = pgn.add_node(san_plus);
                 self.node_stack.push(node);
             }
         } else {
             if let Some(old_node) = self.node_stack.last_mut() {
-                for neighbor in self.pgn.neighbors_directed(*old_node, Direction::Outgoing) {
-                    if self.pgn[neighbor] == san_plus {
+                for neighbor in pgn.neighbors_directed(*old_node, Direction::Outgoing) {
+                    if pgn[neighbor] == san_plus {
                         self.node_stack.push(neighbor);
                         return;
                     }
                 }
-                let node = self.pgn.add_node(san_plus);
-                self.pgn.add_edge(*old_node, node, ());
+                let node = pgn.add_node(san_plus);
+                pgn.add_edge(*old_node, node, ());
                 *old_node = node;
             } else {
-                let node = self.pgn.add_node(san_plus);
+                let node = pgn.add_node(san_plus);
                 self.node_stack.push(node);
             }
         }
     }
 
     fn begin_variation(&mut self) -> Skip {
+        let pgn = match &mut self.pgn {
+            Pgn::Dual { black, .. } if self.store_in_backup => black,
+            Pgn::Single { .. } if self.store_in_backup => {
+                panic!("Trying to filter on player but no black graph!?")
+            }
+            Pgn::Single { player } => player,
+            Pgn::Dual { white, .. } => white,
+        };
         // Variation is an alternative for last move pushed so we want to join to two moves back
         // This won't work well with variations right at the start (should probably be
         // `Vec<Option<NodeStack>>` to create new tree roots...
         if let Some(last) = self.node_stack.last() {
-            let parents = self
-                .pgn
+            let parents = pgn
                 .neighbors_directed(*last, Direction::Incoming)
                 .collect::<Vec<NodeIndex>>();
             if parents.len() > 1 {
-                println!("Unexpected extra parents!?");
+                warn!("Unexpected extra parents!?");
             }
             if !parents.is_empty() {
                 self.node_stack.push(parents[0]);
             }
         } else {
-            println!("No root?");
+            warn!("No root?");
         }
         Skip(false)
     }
@@ -283,5 +375,44 @@ impl Visitor for PgnVisitor {
     fn end_variation(&mut self) {
         // We now want to add to last node before variation
         self.node_stack.pop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_multiline_pgn() {
+        let load = fs::File::open("tests/resources/games.pgn");
+        let load = match load {
+            Ok(s) => s,
+            Err(e) => {
+                panic!("Failed to load Error: {}", e);
+            }
+        };
+
+        let db = OpeningDatabase::load_multigame_pgn(load, "xd009642".to_string()).unwrap();
+
+        // Lets make sure for white we have a QGD and for black a caro kann
+
+        let caro_kann = &[
+            SanPlus::from_ascii(b"e4").unwrap(),
+            SanPlus::from_ascii(b"c6").unwrap(),
+        ];
+        let _state = db.start_drill(chess::Color::Black, caro_kann).unwrap();
+
+        let qgd = &[
+            SanPlus::from_ascii(b"d4").unwrap(),
+            SanPlus::from_ascii(b"d5").unwrap(),
+            SanPlus::from_ascii(b"c4").unwrap(),
+            SanPlus::from_ascii(b"e6").unwrap(),
+        ];
+        let _state = db.start_drill(chess::Color::White, qgd).unwrap();
+    }
+
+    #[test]
+    fn load_test_prep() {
+        OpeningDatabase::load(Path::new("prep")).unwrap();
     }
 }
