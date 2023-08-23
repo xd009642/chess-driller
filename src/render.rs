@@ -252,19 +252,9 @@ impl<'s> RenderSystem<'s> {
     fn draw_board(&mut self, selected_square: Option<Square>) {
         self.canvas
             .with_texture_canvas(&mut self.main_texture, |canvas| {
-                if self.flipped {
-                    canvas.set_draw_color(LIGHT_SQUARE);
-                } else {
-                    canvas.set_draw_color(DARK_SQUARE);
-                }
-
+                canvas.set_draw_color(DARK_SQUARE);
                 canvas.clear();
-
-                if self.flipped {
-                    canvas.set_draw_color(DARK_SQUARE);
-                } else {
-                    canvas.set_draw_color(LIGHT_SQUARE);
-                }
+                canvas.set_draw_color(LIGHT_SQUARE);
 
                 let mut row = 0;
                 while row < 8 {
