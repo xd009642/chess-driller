@@ -16,12 +16,12 @@ pub struct DragContext {
     pub current_y: i32,
 }
 
-pub struct RenderSystem<'s> {
+pub struct BoardWidget {
     flipped: bool,
     sprites: HashMap<(Piece, SquareColor), TextureHandle>,
 }
 
-impl<'s> RenderSystem<'s> {
+impl BoardWidget {
     pub fn new(ui: &mut egui::Ui) -> anyhow::Result<Self> {
 
         let mut sprites = HashMap::new();

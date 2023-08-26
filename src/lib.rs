@@ -22,16 +22,36 @@ pub mod prelude {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct App {
-    chess_com_usernames: Vec<String>,
-    last_db: Option<PathBuf>,
+pub struct ChessDriller {
+    config: Config,
+    database: OpeningDatabase,
+    board: Optioon<gui::BoardWidget>
+}
+
+impl ChessDriller {
+    pub fn new() -> Self {
+        let config = Config::load()?;
+        //let chess_dot_com = ChessComClient::new();
+        //let _user_games = chess_dot_com.download_all_games(&config);
+        let database = OpeningDatabase::load_default()?;
+
+        Self {
+            config, 
+            database,
+            board: None
+        }
+    }
+}
+
+impl eframe::App for App {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("chess-driller");
+        });
+    }
 }
 
 pub fn run() -> anyhow::Result<()> {
-    let config = Config::load()?;
-    let chess_dot_com = ChessComClient::new();
-    let _user_games = chess_dot_com.download_all_games(&config);
-    let database = OpeningDatabase::load_default()?;
     let ctx = sdl2::init().map_err(|e| anyhow!(e))?;
     let width = 600;
     let video = ctx.video().map_err(|e| anyhow!(e))?;

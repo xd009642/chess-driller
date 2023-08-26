@@ -16,5 +16,15 @@ fn main() -> anyhow::Result<()> {
     tracing::subscriber::set_global_default(subscriber)?;
     info!("Starting chess driller");
 
+    let options = eframe::NativeOptions {
+        drag_and_drop_support: true,
+        initial_window_size: Some([800.0, 800.0].into()),
+        ..Default::default()
+    };
+    eframe::run_native(
+        "chess-driller",
+        options,
+        Box::new(|_cc| Box::new(App::new())),
+    )
     chess_driller::run()
 }
