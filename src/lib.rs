@@ -11,7 +11,7 @@ pub mod config;
 pub mod db;
 pub mod events;
 pub mod game;
-pub mod render;
+pub mod gui;
 
 pub mod prelude {
     pub use crate::clients::chess_com::*;

@@ -1,11 +1,7 @@
 use chess::{Board, Color as SquareColor, File, Piece, Rank, Square};
-
-use sdl2::image::LoadTexture;
-use sdl2::pixels::Color;
-use sdl2::rect::Rect;
-use sdl2::render::{Canvas, Texture, TextureCreator};
-use sdl2::video::{Window, WindowContext};
-
+use egui::TextureHandle;
+use egui_extras::image::load_svg_bytes;
+use std::fs;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -22,103 +18,38 @@ pub struct DragContext {
 
 pub struct RenderSystem<'s> {
     flipped: bool,
-    square_size: u32,
-    canvas: &'s mut Canvas<Window>,
-    width: u32,
-    main_texture: Texture<'s>,
-    sprites: HashMap<(Piece, SquareColor), Texture<'s>>,
+    sprites: HashMap<(Piece, SquareColor), TextureHandle>,
 }
 
 impl<'s> RenderSystem<'s> {
-    pub fn new(
-        flipped: bool,
-        width: u32,
-        canvas: &'s mut Canvas<Window>,
-        texture_creator: &'s TextureCreator<WindowContext>,
-    ) -> anyhow::Result<Self> {
-        let mut sprites = HashMap::new();
-        sprites.insert(
-            (Piece::Pawn, SquareColor::White),
-            texture_creator
-                .load_texture(Path::new("resources/p_white.png"))
-                .unwrap(),
-        );
-        sprites.insert(
-            (Piece::Knight, SquareColor::White),
-            texture_creator
-                .load_texture(Path::new("resources/n_white.png"))
-                .unwrap(),
-        );
-        sprites.insert(
-            (Piece::Bishop, SquareColor::White),
-            texture_creator
-                .load_texture(Path::new("resources/b_white.png"))
-                .unwrap(),
-        );
-        sprites.insert(
-            (Piece::Rook, SquareColor::White),
-            texture_creator
-                .load_texture(Path::new("resources/r_white.png"))
-                .unwrap(),
-        );
-        sprites.insert(
-            (Piece::Queen, SquareColor::White),
-            texture_creator
-                .load_texture(Path::new("resources/q_white.png"))
-                .unwrap(),
-        );
-        sprites.insert(
-            (Piece::King, SquareColor::White),
-            texture_creator
-                .load_texture(Path::new("resources/k_white.png"))
-                .unwrap(),
-        );
-        sprites.insert(
-            (Piece::Pawn, SquareColor::Black),
-            texture_creator
-                .load_texture(Path::new("resources/p_black.png"))
-                .unwrap(),
-        );
-        sprites.insert(
-            (Piece::Knight, SquareColor::Black),
-            texture_creator
-                .load_texture(Path::new("resources/n_black.png"))
-                .unwrap(),
-        );
-        sprites.insert(
-            (Piece::Bishop, SquareColor::Black),
-            texture_creator
-                .load_texture(Path::new("resources/b_black.png"))
-                .unwrap(),
-        );
-        sprites.insert(
-            (Piece::Rook, SquareColor::Black),
-            texture_creator
-                .load_texture(Path::new("resources/r_black.png"))
-                .unwrap(),
-        );
-        sprites.insert(
-            (Piece::Queen, SquareColor::Black),
-            texture_creator
-                .load_texture(Path::new("resources/q_black.png"))
-                .unwrap(),
-        );
-        sprites.insert(
-            (Piece::King, SquareColor::Black),
-            texture_creator
-                .load_texture(Path::new("resources/k_black.png"))
-                .unwrap(),
-        );
+    pub fn new(ui: &mut egui::Ui) -> anyhow::Result<Self> {
 
-        let main_texture = texture_creator
-            .create_texture_target(canvas.default_pixel_format(), width, width)
-            .unwrap();
+        let mut sprites = HashMap::new();
+        let w_p = ui.ctx().load_text("white knight", load_svg_bytes(fs::read("resources/n_white.svg")?).unwrap(), Default::default());
+        let w_b = ui.ctx().load_text("white bishop", load_svg_bytes(fs::read("resources/b_white.svg")?).unwrap(), Default::default());
+        let w_r = ui.ctx().load_text("white rook", load_svg_bytes(fs::read("resources/r_white.svg")?).unwrap(), Default::default());
+        let w_q = ui.ctx().load_text("white queen", load_svg_bytes(fs::read("resources/q_white.svg")?).unwrap(), Default::default());
+        let w_k = ui.ctx().load_text("white king", load_svg_bytes(fs::read("resources/k_white.svg")?).unwrap(), Default::default());
+
+        sprites.insert((Piece::Pawn, SquareColor::White), w_p);
+        sprites.insert((Piece::Bishop, SquareColor::White), w_b);
+        sprites.insert((Piece::Rook, SquareColor::White), w_r);
+        sprites.insert((Piece::Queen, SquareColor::White), w_q);
+        sprites.insert((Piece::King, SquareColor::White), w_k);
+        
+        let b_p = ui.ctx().load_text("black knight", load_svg_bytes(fs::read("resources/n_black.svg")?).unwrap(), Default::default());
+        let b_b = ui.ctx().load_text("black bishop", load_svg_bytes(fs::read("resources/b_black.svg")?).unwrap(), Default::default());
+        let b_r = ui.ctx().load_text("black rook", load_svg_bytes(fs::read("resources/r_black.svg")?).unwrap(), Default::default());
+        let b_q = ui.ctx().load_text("black queen", load_svg_bytes(fs::read("resources/q_black.svg")?).unwrap(), Default::default());
+        let b_k = ui.ctx().load_text("black king", load_svg_bytes(fs::read("resources/k_black.svg")?).unwrap(), Default::default());
+        sprites.insert((Piece::Pawn, SquareColor::Black), b_p);
+        sprites.insert((Piece::Bishop, SquareColor::Black), b_b);
+        sprites.insert((Piece::Rook, SquareColor::Black), b_r);
+        sprites.insert((Piece::Queen, SquareColor::Black), b_q);
+        sprites.insert((Piece::King, SquareColor::Black), b_k);
+        
         Ok(Self {
             flipped,
-            square_size: width / 8,
-            canvas,
-            width,
-            main_texture,
             sprites,
         })
     }
