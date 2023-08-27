@@ -1,6 +1,6 @@
 use chess::{Board, Color as SquareColor, File, Piece, Rank, Square};
-use egui::TextureHandle;
-use egui_extras::image::load_svg_bytes;
+use egui::{TextureHandle, Ui, Response, widgets::Widget};
+use egui_extras::image::RetainedImage;
 use std::fs;
 use std::collections::HashMap;
 use std::path::Path;
@@ -18,18 +18,18 @@ pub struct DragContext {
 
 pub struct BoardWidget {
     flipped: bool,
-    sprites: HashMap<(Piece, SquareColor), TextureHandle>,
+    sprites: HashMap<(Piece, SquareColor), RetainedImage>,
 }
 
 impl BoardWidget {
     pub fn new(ui: &mut egui::Ui) -> anyhow::Result<Self> {
 
         let mut sprites = HashMap::new();
-        let w_p = ui.ctx().load_text("white knight", load_svg_bytes(fs::read("resources/n_white.svg")?).unwrap(), Default::default());
-        let w_b = ui.ctx().load_text("white bishop", load_svg_bytes(fs::read("resources/b_white.svg")?).unwrap(), Default::default());
-        let w_r = ui.ctx().load_text("white rook", load_svg_bytes(fs::read("resources/r_white.svg")?).unwrap(), Default::default());
-        let w_q = ui.ctx().load_text("white queen", load_svg_bytes(fs::read("resources/q_white.svg")?).unwrap(), Default::default());
-        let w_k = ui.ctx().load_text("white king", load_svg_bytes(fs::read("resources/k_white.svg")?).unwrap(), Default::default());
+        let w_p = ui.ctx().load_text("white knight", RetainedImage::from_svg_bytes(fs::read("resources/n_white.svg")?).unwrap(), Default::default());
+        let w_b = ui.ctx().load_text("white bishop", RetainedImage::from_svg_bytes(fs::read("resources/b_white.svg")?).unwrap(), Default::default());
+        let w_r = ui.ctx().load_text("white rook", RetainedImage::from_svg_bytes(fs::read("resources/r_white.svg")?).unwrap(), Default::default());
+        let w_q = ui.ctx().load_text("white queen", RetainedImage::from_svg_bytes(fs::read("resources/q_white.svg")?).unwrap(), Default::default());
+        let w_k = ui.ctx().load_text("white king", RetainedImage::from_svg_bytes(fs::read("resources/k_white.svg")?).unwrap(), Default::default());
 
         sprites.insert((Piece::Pawn, SquareColor::White), w_p);
         sprites.insert((Piece::Bishop, SquareColor::White), w_b);
@@ -37,11 +37,11 @@ impl BoardWidget {
         sprites.insert((Piece::Queen, SquareColor::White), w_q);
         sprites.insert((Piece::King, SquareColor::White), w_k);
         
-        let b_p = ui.ctx().load_text("black knight", load_svg_bytes(fs::read("resources/n_black.svg")?).unwrap(), Default::default());
-        let b_b = ui.ctx().load_text("black bishop", load_svg_bytes(fs::read("resources/b_black.svg")?).unwrap(), Default::default());
-        let b_r = ui.ctx().load_text("black rook", load_svg_bytes(fs::read("resources/r_black.svg")?).unwrap(), Default::default());
-        let b_q = ui.ctx().load_text("black queen", load_svg_bytes(fs::read("resources/q_black.svg")?).unwrap(), Default::default());
-        let b_k = ui.ctx().load_text("black king", load_svg_bytes(fs::read("resources/k_black.svg")?).unwrap(), Default::default());
+        let b_p = ui.ctx().load_text("black knight", RetainedImage::from_svg_bytes(fs::read("resources/n_black.svg")?).unwrap(), Default::default());
+        let b_b = ui.ctx().load_text("black bishop", RetainedImage::from_svg_bytes(fs::read("resources/b_black.svg")?).unwrap(), Default::default());
+        let b_r = ui.ctx().load_text("black rook", RetainedImage::from_svg_bytes(fs::read("resources/r_black.svg")?).unwrap(), Default::default());
+        let b_q = ui.ctx().load_text("black queen", RetainedImage::from_svg_bytes(fs::read("resources/q_black.svg")?).unwrap(), Default::default());
+        let b_k = ui.ctx().load_text("black king", RetainedImage::from_svg_bytes(fs::read("resources/k_black.svg")?).unwrap(), Default::default());
         sprites.insert((Piece::Pawn, SquareColor::Black), b_p);
         sprites.insert((Piece::Bishop, SquareColor::Black), b_b);
         sprites.insert((Piece::Rook, SquareColor::Black), b_r);
@@ -180,7 +180,7 @@ impl BoardWidget {
             .unwrap();
     }
 
-    fn draw_board(&mut self, selected_square: Option<Square>) {
+    fn draw_board(&mut self,  selected_square: Option<Square>) {
         self.canvas
             .with_texture_canvas(&mut self.main_texture, |canvas| {
                 canvas.set_draw_color(DARK_SQUARE);
@@ -315,5 +315,42 @@ impl BoardWidget {
         }
 
         (rank, file)
+    }
+}
+
+impl Widget for &BoardWidget {
+    fn ui(self, ui, &mut Ui) -> Response {
+        let painter = ui.painter();
+        let mut rect = ui.clip_rect();
+        let aspect_ratio = rect.aspect_ratio();
+        if aspect_ratio  < 0.95 {
+            rect.set_height(rect.height() * aspect_ratio);
+        } else if aspect_ratio  > 1.05 {
+            rect.set_width(rect.width() / aspect_ratio);
+        }
+        self.draw_board(selected_square);
+        self.draw_pieces(
+            board,
+            selected_square,
+            drag_context,
+            promotion_from_to.map(|(_, to)| to),
+        );
+
+        if let Some((from, to)) = promotion_from_to {
+            self.render_promotion_picker(
+                to,
+                board.color_on(from).expect("no piece on promotion square?"),
+            );
+        }
+
+        self.canvas
+            .copy(
+                &self.main_texture,
+                None,
+                Rect::new(0, 0, self.width, self.width),
+            )
+            .unwrap();
+
+        self.canvas.present();
     }
 }
