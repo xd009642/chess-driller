@@ -18,14 +18,14 @@ pub mod prelude {
     pub use crate::config::*;
     pub use crate::db::*;
     pub use crate::events::*;
-    pub use crate::render::*;
+    pub use crate::gui::board::*;
 }
 
 #[derive(Clone)]
 pub struct ChessDriller {
     config: Config,
     database: OpeningDatabase,
-    board: Optioon<gui::BoardWidget>,
+    board: Option<BoardWidget>,
 }
 
 impl ChessDriller {
@@ -43,7 +43,7 @@ impl ChessDriller {
     }
 }
 
-impl eframe::App for App {
+impl eframe::App for ChessDriller {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("chess-driller");

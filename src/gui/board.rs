@@ -1,5 +1,5 @@
 use chess::{Board, Color as SquareColor, File, Piece, Rank, Square};
-use egui::{widgets::Widget, Color32, Response, TextureHandle, Ui};
+use egui::{widgets::Widget, Color32, Painter, Rect, Response, Rounding, TextureHandle, Ui};
 use egui_extras::image::RetainedImage;
 use std::collections::HashMap;
 use std::fs;
@@ -24,15 +24,17 @@ pub struct BoardWidget {
 impl BoardWidget {
     pub fn new(ui: &mut egui::Ui) -> anyhow::Result<Self> {
         let mut sprites = HashMap::new();
-        let w_p = RetainedImage::from_svg_bytes("white knight", fs::read("resources/n_white.svg")?)
+        let w_p =
+            RetainedImage::from_svg_bytes("white knight", &fs::read("resources/n_white.svg")?)
+                .unwrap();
+        let w_b =
+            RetainedImage::from_svg_bytes("white bishop", &fs::read("resources/b_white.svg")?)
+                .unwrap();
+        let w_r = RetainedImage::from_svg_bytes("white rook", &fs::read("resources/r_white.svg")?)
             .unwrap();
-        let w_b = RetainedImage::from_svg_bytes("white bishop", fs::read("resources/b_white.svg")?)
+        let w_q = RetainedImage::from_svg_bytes("white queen", &fs::read("resources/q_white.svg")?)
             .unwrap();
-        let w_r = RetainedImage::from_svg_bytes("white rook", fs::read("resources/r_white.svg")?)
-            .unwrap();
-        let w_q = RetainedImage::from_svg_bytes("white queen", fs::read("resources/q_white.svg")?)
-            .unwrap();
-        let w_k = RetainedImage::from_svg_bytes("white king", fs::read("resources/k_white.svg")?)
+        let w_k = RetainedImage::from_svg_bytes("white king", &fs::read("resources/k_white.svg")?)
             .unwrap();
 
         sprites.insert((Piece::Pawn, SquareColor::White), w_p);
@@ -41,15 +43,17 @@ impl BoardWidget {
         sprites.insert((Piece::Queen, SquareColor::White), w_q);
         sprites.insert((Piece::King, SquareColor::White), w_k);
 
-        let b_p = RetainedImage::from_svg_bytes("black knight", fs::read("resources/n_black.svg")?)
+        let b_p =
+            RetainedImage::from_svg_bytes("black knight", &fs::read("resources/n_black.svg")?)
+                .unwrap();
+        let b_b =
+            RetainedImage::from_svg_bytes("black bishop", &fs::read("resources/b_black.svg")?)
+                .unwrap();
+        let b_r = RetainedImage::from_svg_bytes("black rook", &fs::read("resources/r_black.svg")?)
             .unwrap();
-        let b_b = RetainedImage::from_svg_bytes("black bishop", fs::read("resources/b_black.svg")?)
+        let b_q = RetainedImage::from_svg_bytes("black queen", &fs::read("resources/q_black.svg")?)
             .unwrap();
-        let b_r = RetainedImage::from_svg_bytes("black rook", fs::read("resources/r_black.svg")?)
-            .unwrap();
-        let b_q = RetainedImage::from_svg_bytes("black queen", fs::read("resources/q_black.svg")?)
-            .unwrap();
-        let b_k = RetainedImage::from_svg_bytes("black king", fs::read("resources/k_black.svg")?)
+        let b_k = RetainedImage::from_svg_bytes("black king", &fs::read("resources/k_black.svg")?)
             .unwrap();
         sprites.insert((Piece::Pawn, SquareColor::Black), b_p);
         sprites.insert((Piece::Bishop, SquareColor::Black), b_b);
@@ -57,7 +61,10 @@ impl BoardWidget {
         sprites.insert((Piece::Queen, SquareColor::Black), b_q);
         sprites.insert((Piece::King, SquareColor::Black), b_k);
 
-        Ok(Self { flipped, sprites })
+        Ok(Self {
+            flipped: false,
+            sprites,
+        })
     }
 
     /// (╯°□°)╯︵ ┻━┻.
@@ -81,30 +88,7 @@ impl BoardWidget {
         drag_context: Option<DragContext>,
         promotion_from_to: Option<(Square, Square)>,
     ) {
-        self.draw_board(selected_square);
-        self.draw_pieces(
-            board,
-            selected_square,
-            drag_context,
-            promotion_from_to.map(|(_, to)| to),
-        );
-
-        if let Some((from, to)) = promotion_from_to {
-            self.render_promotion_picker(
-                to,
-                board.color_on(from).expect("no piece on promotion square?"),
-            );
-        }
-
-        self.canvas
-            .copy(
-                &self.main_texture,
-                None,
-                Rect::new(0, 0, self.width, self.width),
-            )
-            .unwrap();
-
-        self.canvas.present();
+        todo!()
     }
 
     fn draw_pieces(
@@ -114,127 +98,123 @@ impl BoardWidget {
         drag_context: Option<DragContext>,
         active_promotion: Option<Square>,
     ) {
-        self.canvas
-            .with_texture_canvas(&mut self.main_texture, |canvas| {
-                for i in 0..64 {
-                    let square = unsafe { Square::new(i) };
-                    if let Some(piece) = board.piece_on(square) {
-                        if (selected_square == Some(square) && drag_context.is_some())
-                            || active_promotion == Some(square)
-                        {
-                            continue;
-                        }
-
-                        let color = board.color_on(square).unwrap();
-                        let (rank, file) = Self::rank_and_file(self.flipped, square);
-                        let sprite = &self.sprites[&(piece, color)];
-
-                        canvas
-                            .copy(
-                                sprite,
-                                None,
-                                Rect::new(
-                                    (file * self.square_size) as i32,
-                                    (rank * self.square_size) as i32,
-                                    self.square_size,
-                                    self.square_size,
-                                ),
-                            )
-                            .unwrap();
-                    }
+        for i in 0..64 {
+            let square = unsafe { Square::new(i) };
+            if let Some(piece) = board.piece_on(square) {
+                if (selected_square == Some(square) && drag_context.is_some())
+                    || active_promotion == Some(square)
+                {
+                    continue;
                 }
 
-                if let Some((active_promotion, square)) = active_promotion.zip(selected_square) {
-                    if let Some(piece) = board.piece_on(square) {
-                        let color = board.color_on(square).unwrap();
-                        let (rank, file) = Self::rank_and_file(self.flipped, active_promotion);
-                        let sprite = &self.sprites[&(piece, color)];
+                let color = board.color_on(square).unwrap();
+                let (rank, file) = Self::rank_and_file(self.flipped, square);
+                let sprite = &self.sprites[&(piece, color)];
 
-                        canvas
-                            .copy(
-                                sprite,
-                                None,
-                                Rect::new(
-                                    (file * self.square_size) as i32,
-                                    (rank * self.square_size) as i32,
-                                    self.square_size,
-                                    self.square_size,
-                                ),
-                            )
-                            .unwrap();
-                    }
-                } else if let Some((square, drag_context)) = selected_square.zip(drag_context) {
-                    if let Some(piece) = board.piece_on(square) {
-                        let color = board.color_on(square).unwrap();
-                        let sprite = &self.sprites[&(piece, color)];
+                /*
+                canvas
+                   .copy(
+                       sprite,
+                       None,
+                       Rect::new(
+                           (file * self.square_size) as i32,
+                           (rank * self.square_size) as i32,
+                           self.square_size,
+                           self.square_size,
+                       ),
+                   )
+                   .unwrap();
+                   */
+            }
+        }
 
-                        canvas
-                            .copy(
-                                sprite,
-                                None,
-                                Rect::new(
-                                    drag_context.current_x - (self.square_size / 2) as i32,
-                                    drag_context.current_y - (self.square_size / 2) as i32,
-                                    self.square_size,
-                                    self.square_size,
-                                ),
-                            )
-                            .unwrap();
-                    }
-                }
-            })
-            .unwrap();
+        if let Some((active_promotion, square)) = active_promotion.zip(selected_square) {
+            if let Some(piece) = board.piece_on(square) {
+                let color = board.color_on(square).unwrap();
+                let (rank, file) = Self::rank_and_file(self.flipped, active_promotion);
+                let sprite = &self.sprites[&(piece, color)];
+
+                /*
+                canvas
+                    .copy(
+                        sprite,
+                        None,
+                        Rect::new(
+                            (file * self.square_size) as i32,
+                            (rank * self.square_size) as i32,
+                            self.square_size,
+                            self.square_size,
+                        ),
+                    )
+                    .unwrap();
+                */
+            }
+        } else if let Some((square, drag_context)) = selected_square.zip(drag_context) {
+            if let Some(piece) = board.piece_on(square) {
+                let color = board.color_on(square).unwrap();
+                let sprite = &self.sprites[&(piece, color)];
+                /*
+                canvas
+                    .copy(
+                        sprite,
+                        None,
+                        Rect::new(
+                            drag_context.current_x - (self.square_size / 2) as i32,
+                            drag_context.current_y - (self.square_size / 2) as i32,
+                            self.square_size,
+                            self.square_size,
+                        ),
+                    )
+                    .unwrap();
+                    */
+            }
+        }
     }
 
-    fn draw_board(&mut self, selected_square: Option<Square>) {
-        self.canvas
-            .with_texture_canvas(&mut self.main_texture, |canvas| {
-                canvas.set_draw_color(DARK_SQUARE);
-                canvas.clear();
-                canvas.set_draw_color(LIGHT_SQUARE);
+    fn draw_board(&mut self, painter: &Painter, rect: &Rect, selected_square: Option<Square>) {
+        let square_size = rect.width() / 8.0;
+        painter.fill_rect(painter.clip_rect(), Rounding::none(), DARK_SQUARE);
 
-                let mut row = 0;
-                while row < 8 {
-                    let mut x = row % 2;
-                    for _ in (row % 2)..(4 + (row % 2)) {
-                        let rect = Rect::new(
-                            x * self.square_size as i32,
-                            row * self.square_size as i32,
-                            self.square_size,
-                            self.square_size,
-                        );
-                        x += 2;
-                        let _ = canvas.fill_rect(rect);
-                    }
-                    row += 1;
-                }
+        let mut row = 0;
+        while row < 8 {
+            let mut x = row % 2;
+            for _ in (row % 2)..(4 + (row % 2)) {
+                let rect = Rect::new(
+                    x * square_size as i32,
+                    row * square_size as i32,
+                    square_size,
+                    square_size,
+                );
+                x += 2;
+                painter.rect_filled(r, Rounding::none(), LIGHT_SQUARE);
+            }
+            row += 1;
+        }
 
-                if let Some(square) = selected_square {
-                    let selected_color = match square.get_file().to_index() % 2 == 0 {
-                        true => match square.get_rank().to_index() % 2 == 0 {
-                            true => SELECTED_DARK_SQUARE,
-                            false => SELECTED_LIGHT_SQUARE,
-                        },
-                        false => match square.get_rank().to_index() % 2 == 0 {
-                            true => SELECTED_LIGHT_SQUARE,
-                            false => SELECTED_DARK_SQUARE,
-                        },
-                    };
+        if let Some(square) = selected_square {
+            let selected_color = match square.get_file().to_index() % 2 == 0 {
+                true => match square.get_rank().to_index() % 2 == 0 {
+                    true => SELECTED_DARK_SQUARE,
+                    false => SELECTED_LIGHT_SQUARE,
+                },
+                false => match square.get_rank().to_index() % 2 == 0 {
+                    true => SELECTED_LIGHT_SQUARE,
+                    false => SELECTED_DARK_SQUARE,
+                },
+            };
 
-                    canvas.set_draw_color(selected_color);
+            //canvas.set_draw_color(selected_color);
 
-                    let (rank, file) = Self::rank_and_file(self.flipped, square);
-                    let rect = Rect::new(
-                        (file * self.square_size) as i32,
-                        (rank * self.square_size) as i32,
-                        self.square_size,
-                        self.square_size,
-                    );
+            let (rank, file) = Self::rank_and_file(self.flipped, square);
+            let rect = Rect::new(
+                (file * square_size) as i32,
+                (rank * square_size) as i32,
+                square_size,
+                square_size,
+            );
 
-                    let _ = canvas.fill_rect(rect);
-                }
-            })
-            .unwrap();
+            //let _ = canvas.fill_rect(rect);
+        }
     }
 
     pub fn render_promotion_picker(&mut self, square: Square, color: chess::Color) {
@@ -324,7 +304,7 @@ impl BoardWidget {
     }
 }
 
-impl Widget for &BoardWidget {
+impl Widget for &mut BoardWidget {
     fn ui(self, ui: &mut Ui) -> Response {
         let painter = ui.painter();
         let mut rect = ui.clip_rect();
@@ -334,7 +314,8 @@ impl Widget for &BoardWidget {
         } else if aspect_ratio > 1.05 {
             rect.set_width(rect.width() / aspect_ratio);
         }
-        self.draw_board(selected_square);
+
+        self.draw_board(painter, &rect, selected_square);
         self.draw_pieces(
             board,
             selected_square,
@@ -349,14 +330,6 @@ impl Widget for &BoardWidget {
             );
         }
 
-        self.canvas
-            .copy(
-                &self.main_texture,
-                None,
-                Rect::new(0, 0, self.width, self.width),
-            )
-            .unwrap();
-
-        self.canvas.present();
+        todo!()
     }
 }

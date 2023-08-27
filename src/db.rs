@@ -20,7 +20,7 @@ pub enum MoveAssessment {
 
 pub type OpeningGraph = Graph<SanPlus, ()>;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct OpeningDatabase {
     white_openings: OpeningGraph,
     black_openings: OpeningGraph,
