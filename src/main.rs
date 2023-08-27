@@ -24,7 +24,7 @@ fn main() -> anyhow::Result<()> {
     eframe::run_native(
         "chess-driller",
         options,
-        Box::new(|_cc| Box::new(App::new())),
-    )
-    chess_driller::run()
+        Box::new(|_cc| Box::new(ChessDriller::new())),
+    );
+    Ok(())
 }

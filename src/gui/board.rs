@@ -1,14 +1,14 @@
 use chess::{Board, Color as SquareColor, File, Piece, Rank, Square};
-use egui::{TextureHandle, Ui, Response, widgets::Widget};
+use egui::{widgets::Widget, Color32, Response, TextureHandle, Ui};
 use egui_extras::image::RetainedImage;
-use std::fs;
 use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
 
-const LIGHT_SQUARE: Color = Color::RGB(0xFF, 0xCE, 0x9E);
-const DARK_SQUARE: Color = Color::RGB(0xD1, 0x8B, 0x47);
-const SELECTED_LIGHT_SQUARE: Color = Color::RGB(0xF6, 0xEA, 0x71);
-const SELECTED_DARK_SQUARE: Color = Color::RGB(0xDB, 0xC3, 0x4A);
+const LIGHT_SQUARE: Color32 = Color32::from_rgb(0xFF, 0xCE, 0x9E);
+const DARK_SQUARE: Color32 = Color32::from_rgb(0xD1, 0x8B, 0x47);
+const SELECTED_LIGHT_SQUARE: Color32 = Color32::from_rgb(0xF6, 0xEA, 0x71);
+const SELECTED_DARK_SQUARE: Color32 = Color32::from_rgb(0xDB, 0xC3, 0x4A);
 
 #[derive(Debug, Clone, Copy)]
 pub struct DragContext {
@@ -23,35 +23,41 @@ pub struct BoardWidget {
 
 impl BoardWidget {
     pub fn new(ui: &mut egui::Ui) -> anyhow::Result<Self> {
-
         let mut sprites = HashMap::new();
-        let w_p = ui.ctx().load_text("white knight", RetainedImage::from_svg_bytes(fs::read("resources/n_white.svg")?).unwrap(), Default::default());
-        let w_b = ui.ctx().load_text("white bishop", RetainedImage::from_svg_bytes(fs::read("resources/b_white.svg")?).unwrap(), Default::default());
-        let w_r = ui.ctx().load_text("white rook", RetainedImage::from_svg_bytes(fs::read("resources/r_white.svg")?).unwrap(), Default::default());
-        let w_q = ui.ctx().load_text("white queen", RetainedImage::from_svg_bytes(fs::read("resources/q_white.svg")?).unwrap(), Default::default());
-        let w_k = ui.ctx().load_text("white king", RetainedImage::from_svg_bytes(fs::read("resources/k_white.svg")?).unwrap(), Default::default());
+        let w_p = RetainedImage::from_svg_bytes("white knight", fs::read("resources/n_white.svg")?)
+            .unwrap();
+        let w_b = RetainedImage::from_svg_bytes("white bishop", fs::read("resources/b_white.svg")?)
+            .unwrap();
+        let w_r = RetainedImage::from_svg_bytes("white rook", fs::read("resources/r_white.svg")?)
+            .unwrap();
+        let w_q = RetainedImage::from_svg_bytes("white queen", fs::read("resources/q_white.svg")?)
+            .unwrap();
+        let w_k = RetainedImage::from_svg_bytes("white king", fs::read("resources/k_white.svg")?)
+            .unwrap();
 
         sprites.insert((Piece::Pawn, SquareColor::White), w_p);
         sprites.insert((Piece::Bishop, SquareColor::White), w_b);
         sprites.insert((Piece::Rook, SquareColor::White), w_r);
         sprites.insert((Piece::Queen, SquareColor::White), w_q);
         sprites.insert((Piece::King, SquareColor::White), w_k);
-        
-        let b_p = ui.ctx().load_text("black knight", RetainedImage::from_svg_bytes(fs::read("resources/n_black.svg")?).unwrap(), Default::default());
-        let b_b = ui.ctx().load_text("black bishop", RetainedImage::from_svg_bytes(fs::read("resources/b_black.svg")?).unwrap(), Default::default());
-        let b_r = ui.ctx().load_text("black rook", RetainedImage::from_svg_bytes(fs::read("resources/r_black.svg")?).unwrap(), Default::default());
-        let b_q = ui.ctx().load_text("black queen", RetainedImage::from_svg_bytes(fs::read("resources/q_black.svg")?).unwrap(), Default::default());
-        let b_k = ui.ctx().load_text("black king", RetainedImage::from_svg_bytes(fs::read("resources/k_black.svg")?).unwrap(), Default::default());
+
+        let b_p = RetainedImage::from_svg_bytes("black knight", fs::read("resources/n_black.svg")?)
+            .unwrap();
+        let b_b = RetainedImage::from_svg_bytes("black bishop", fs::read("resources/b_black.svg")?)
+            .unwrap();
+        let b_r = RetainedImage::from_svg_bytes("black rook", fs::read("resources/r_black.svg")?)
+            .unwrap();
+        let b_q = RetainedImage::from_svg_bytes("black queen", fs::read("resources/q_black.svg")?)
+            .unwrap();
+        let b_k = RetainedImage::from_svg_bytes("black king", fs::read("resources/k_black.svg")?)
+            .unwrap();
         sprites.insert((Piece::Pawn, SquareColor::Black), b_p);
         sprites.insert((Piece::Bishop, SquareColor::Black), b_b);
         sprites.insert((Piece::Rook, SquareColor::Black), b_r);
         sprites.insert((Piece::Queen, SquareColor::Black), b_q);
         sprites.insert((Piece::King, SquareColor::Black), b_k);
-        
-        Ok(Self {
-            flipped,
-            sprites,
-        })
+
+        Ok(Self { flipped, sprites })
     }
 
     /// (╯°□°)╯︵ ┻━┻.
@@ -180,7 +186,7 @@ impl BoardWidget {
             .unwrap();
     }
 
-    fn draw_board(&mut self,  selected_square: Option<Square>) {
+    fn draw_board(&mut self, selected_square: Option<Square>) {
         self.canvas
             .with_texture_canvas(&mut self.main_texture, |canvas| {
                 canvas.set_draw_color(DARK_SQUARE);
@@ -237,11 +243,11 @@ impl BoardWidget {
         self.canvas
             .with_texture_canvas(&mut self.main_texture, |canvas| {
                 canvas.set_blend_mode(sdl2::render::BlendMode::Blend);
-                canvas.set_draw_color(Color::RGBA(0, 0, 0, 0x40));
+                canvas.set_draw_color(Color32::from_rgba_premultiplied(0, 0, 0, 0x40));
                 canvas
                     .fill_rect(Rect::new(0, 0, self.width, self.width))
                     .unwrap();
-                canvas.set_draw_color(Color::RGB(0xFF, 0xFF, 0xFF));
+                canvas.set_draw_color(Color32::from_rgb(0xFF, 0xFF, 0xFF));
 
                 let (rank, file) = Self::rank_and_file(self.flipped, square);
                 let offset = if file == 7 { -1i32 } else { 1 };
@@ -319,13 +325,13 @@ impl BoardWidget {
 }
 
 impl Widget for &BoardWidget {
-    fn ui(self, ui, &mut Ui) -> Response {
+    fn ui(self, ui: &mut Ui) -> Response {
         let painter = ui.painter();
         let mut rect = ui.clip_rect();
         let aspect_ratio = rect.aspect_ratio();
-        if aspect_ratio  < 0.95 {
+        if aspect_ratio < 0.95 {
             rect.set_height(rect.height() * aspect_ratio);
-        } else if aspect_ratio  > 1.05 {
+        } else if aspect_ratio > 1.05 {
             rect.set_width(rect.width() / aspect_ratio);
         }
         self.draw_board(selected_square);

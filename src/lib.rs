@@ -21,25 +21,25 @@ pub mod prelude {
     pub use crate::render::*;
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct ChessDriller {
     config: Config,
     database: OpeningDatabase,
-    board: Optioon<gui::BoardWidget>
+    board: Optioon<gui::BoardWidget>,
 }
 
 impl ChessDriller {
-    pub fn new() -> Self {
+    pub fn new() -> anyhow::Result<Self> {
         let config = Config::load()?;
         //let chess_dot_com = ChessComClient::new();
         //let _user_games = chess_dot_com.download_all_games(&config);
         let database = OpeningDatabase::load_default()?;
 
-        Self {
-            config, 
+        Ok(Self {
+            config,
             database,
-            board: None
-        }
+            board: None,
+        })
     }
 }
 
