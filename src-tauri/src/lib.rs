@@ -1,58 +1,92 @@
-use crate::prelude::*;
 use anyhow::{anyhow, bail};
-use chess::{Board, ChessMove};
 use sdl2::image::InitFlag;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tracing::info;
+use tracing::{error, info};
+use std::sync::Mutex;
+use std::str::FromStr;
+use shakmaty::{Color, Chess, Square, Position};
 
 pub mod clients;
 pub mod config;
 pub mod db;
-pub mod events;
 pub mod game;
-pub mod render;
 
-pub mod prelude {
-    pub use crate::clients::chess_com::*;
-    pub use crate::config::*;
-    pub use crate::db::*;
-    pub use crate::events::*;
-    pub use crate::render::*;
-}
+pub use crate::clients::chess_com::*;
+pub use crate::config::*;
+pub use crate::db::*;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChessState(Mutex<App>);
+
+#[derive(Clone)]
 pub struct App {
     chess_com_usernames: Vec<String>,
-    last_db: Option<PathBuf>,
+    db: OpeningDatabase,
+    color: Color,
+    game: Chess,
 }
 
+fn create_app() -> anyhow::Result<App> {
+    let config = Config::load()?;
+    let chess_dot_com = ChessComClient::new();
+    let db = OpeningDatabase::load_default()?;
+
+    Ok(App {
+        chess_com_usernames: config.chess_com,
+        db,
+        color: Color::White,
+        game: Chess::new()
+    })
+}
+
+pub fn launch() {
+
+    tauri::Builder::default()
+        .manage(ChessState(Mutex::new(create_app().unwrap())))
+        .invoke_handler(tauri::generate_handler![commands::move_piece])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+
+pub mod commands {
+    use super::*;
+    use tauri::State;
+
+    #[tauri::command]
+    pub fn move_piece(from: &str, to: &str, state: State<ChessState>) -> String {
+        let mut state = state.0.lock().unwrap();
+        let sel_square = Square::from_ascii(from.as_bytes()).unwrap();
+        let promotion_square = Square::from_ascii(to.as_bytes()).unwrap();
+
+        let board = state.game.board();
+
+        let piece = board.piece_at(sel_square).unwrap();
+
+        let moves = state.game.san_candidates(piece.role, promotion_square);
+
+        info!("Move list: {:?}", moves); 
+
+
+        let game = state.game.clone();
+        match game.play(&moves[0]) {
+            Ok(new_game) => {
+                state.game = new_game;
+            }
+            Err(e) => {
+                error!("{}", e);
+            }
+        }
+        state.game.board().to_string()
+    }
+
+}
+/*
 pub fn run() -> anyhow::Result<()> {
     let config = Config::load()?;
     let chess_dot_com = ChessComClient::new();
     let _user_games = chess_dot_com.download_all_games(&config);
     let database = OpeningDatabase::load_default()?;
-    let ctx = sdl2::init().map_err(|e| anyhow!(e))?;
-    let width = 600;
-    let video = ctx.video().map_err(|e| anyhow!(e))?;
 
-    let _image_context = sdl2::image::init(InitFlag::PNG).map_err(|e| anyhow!(e))?;
-
-    let window = match video
-        .window("Chess-driller", width, width)
-        .position_centered()
-        .opengl()
-        .build()
-    {
-        Ok(window) => window,
-        Err(err) => bail!("failed to create window: {}", err),
-    };
-
-    let mut canvas = window.into_canvas().software().build()?;
-    let texture_creator = canvas.texture_creator();
-
-    let mut window = RenderSystem::new(false, width, &mut canvas, &texture_creator)?;
-    let mut events = EventSystem::new(ctx)?;
     let mut running = true;
 
     let mut board = Board::default();
@@ -188,51 +222,6 @@ pub fn run() -> anyhow::Result<()> {
                         }
                     }
                 }
-                EventKind::MouseDragBegin { x, y } => {
-                    drag_context = Some(DragContext {
-                        current_x: x,
-                        current_y: y,
-                    });
-                    if let Some(square) = window.get_square(x, y) {
-                        if board.piece_on(square).is_some() {
-                            selected_square = Some(square);
-                        }
-                    }
-                }
-                EventKind::MouseDragMove { x, y } => {
-                    drag_context = Some(DragContext {
-                        current_x: x,
-                        current_y: y,
-                    });
-                }
-                EventKind::MouseDragEnd { x, y } => {
-                    if let Some(dst_square) = window.get_square(x, y) {
-                        if let Some(src_square) = selected_square {
-                            let rank = dst_square.get_rank().to_index();
-                            let promotion = match board.piece_on(src_square) {
-                                Some(chess::Piece::Pawn) if rank == 0 || rank == 7 => {
-                                    Some(chess::Piece::Queen)
-                                }
-                                _ => None,
-                            };
-                            let candidate_move = ChessMove::new(src_square, dst_square, promotion);
-                            if board.legal(candidate_move) {
-                                if promotion.is_some() {
-                                    pending_promotion_square = Some(dst_square);
-                                    promotion_from = Some(src_square);
-                                    continue;
-                                }
-
-                                board = board.make_move_new(candidate_move);
-                                selected_square = None;
-                            } else {
-                                selected_square = None;
-                            }
-                        }
-                    }
-
-                    drag_context = None;
-                }
                 // TODO: long click mouse up mouse down?
                 _ => {}
             }
@@ -243,3 +232,4 @@ pub fn run() -> anyhow::Result<()> {
 
     Ok(())
 }
+*/

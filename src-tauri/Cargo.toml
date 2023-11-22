@@ -3,7 +3,11 @@ name = "chess-driller"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
+# If you use cargo directly instead of tauri's cli you can use this feature flag to switch between tauri's `dev` and `build` modes.
+# DO NOT REMOVE!!
+custom-protocol = [ "tauri/custom-protocol" ]
 
 [dependencies]
 anyhow = "1.0.72"
@@ -19,6 +23,10 @@ sdl2 = { version = "0.35.2", features = ["image"] }
 serde = { version = "1.0.183", features = ["derive"] }
 serde_json = "1.0.104"
 shakmaty = "0.26.0"
+tauri = { version = "1.5.2", features = [] }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 walkdir = "2.3.3"
+
+[build-dependencies]
+tauri-build = { version = "1.5.0", features = [] }
