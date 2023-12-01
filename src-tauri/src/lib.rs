@@ -1,11 +1,11 @@
 use anyhow::{anyhow, bail};
 use sdl2::image::InitFlag;
 use serde::{Deserialize, Serialize};
+use shakmaty::{Chess, Color, Position, Role, Square};
 use std::path::PathBuf;
-use tracing::{error, info};
-use std::sync::Mutex;
 use std::str::FromStr;
-use shakmaty::{Color, Chess, Square, Position};
+use std::sync::Mutex;
+use tracing::{error, info};
 
 pub mod clients;
 pub mod config;
@@ -35,12 +35,11 @@ fn create_app() -> anyhow::Result<App> {
         chess_com_usernames: config.chess_com,
         db,
         color: Color::White,
-        game: Chess::new()
+        game: Chess::new(),
     })
 }
 
 pub fn launch() {
-
     tauri::Builder::default()
         .manage(ChessState(Mutex::new(create_app().unwrap())))
         .invoke_handler(tauri::generate_handler![commands::move_piece])
@@ -53,7 +52,9 @@ pub mod commands {
     use tauri::State;
 
     #[tauri::command]
-    pub fn move_piece(from: &str, to: &str, state: State<ChessState>) -> String {
+    pub fn move_piece(from: &str, to: &str, promotion: &str, state: State<ChessState>) -> String {
+        info!("Args: {}->{} {}", from, to, promotion);
+
         let mut state = state.0.lock().unwrap();
         let sel_square = Square::from_ascii(from.as_bytes()).unwrap();
         let promotion_square = Square::from_ascii(to.as_bytes()).unwrap();
@@ -64,11 +65,23 @@ pub mod commands {
 
         let moves = state.game.san_candidates(piece.role, promotion_square);
 
-        info!("Move list: {:?}", moves); 
+        // Move wasn't legal!
+        if moves.is_empty() {
+            return state.game.board().to_string();
+        }
 
+        // There must be a promotion available!
+        let game_move = if moves.len() > 1 {
+            let promo = Role::from_char(promotion.chars().nth(1).unwrap()).unwrap();
+            moves.iter().find(|x| x.promotion() == Some(promo)).unwrap()
+        } else {
+            &moves[0]
+        };
+
+        info!("Move list: {:?}", moves);
 
         let game = state.game.clone();
-        match game.play(&moves[0]) {
+        match game.play(game_move) {
             Ok(new_game) => {
                 state.game = new_game;
             }
@@ -78,7 +91,6 @@ pub mod commands {
         }
         state.game.board().to_string()
     }
-
 }
 /*
 pub fn run() -> anyhow::Result<()> {
