@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail};
 use sdl2::image::InitFlag;
 use serde::{Deserialize, Serialize};
-use shakmaty::{Chess, Color, Position, Role, Square};
+use shakmaty::{san::SanPlus, Chess, Color, Position, Role, Square};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -24,6 +24,8 @@ pub struct App {
     db: OpeningDatabase,
     color: Color,
     game: Chess,
+    game_state: Option<GameState>,
+    moves: Vec<SanPlus>,
 }
 
 fn create_app() -> anyhow::Result<App> {
@@ -31,18 +33,26 @@ fn create_app() -> anyhow::Result<App> {
     let chess_dot_com = ChessComClient::new();
     let db = OpeningDatabase::load_default()?;
 
+    let game_state = db.start_drill(Color::White, &[]);
+
     Ok(App {
         chess_com_usernames: config.chess_com,
         db,
         color: Color::White,
         game: Chess::new(),
+        moves: vec![],
+        game_state,
     })
 }
 
 pub fn launch() {
     tauri::Builder::default()
         .manage(ChessState(Mutex::new(create_app().unwrap())))
-        .invoke_handler(tauri::generate_handler![commands::move_piece])
+        .invoke_handler(tauri::generate_handler![
+            commands::move_piece,
+            commands::start,
+            commands::reset
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -50,6 +60,14 @@ pub fn launch() {
 pub mod commands {
     use super::*;
     use tauri::State;
+
+    #[tauri::command]
+    pub fn start(colour: &str, state: State<ChessState>) -> String {
+        todo!()
+    }
+
+    #[tauri::command]
+    pub fn reset(state: State<ChessState>) {}
 
     #[tauri::command]
     pub fn move_piece(from: &str, to: &str, promotion: &str, state: State<ChessState>) -> String {
@@ -80,10 +98,28 @@ pub mod commands {
 
         info!("Move list: {:?}", moves);
 
+        let san = SanPlus::from_move(state.game.clone(), game_move);
+
         let game = state.game.clone();
         match game.play(game_move) {
             Ok(new_game) => {
                 state.game = new_game;
+                let mut game_state = state.game_state.take();
+                let graph = state.db.graph(state.color);
+                if let Some(game_state) = game_state.as_mut() {
+                    let prep_state = game_state.apply_move(&san, graph);
+                    info!("Prep status: {:?}", prep_state);
+                    if let Some(mv) = game_state.make_move(graph) {
+                        let game = state.game.clone();
+
+                        let mv = mv.san.to_move(&game).unwrap();
+                        let new_game = game.clone().play(&mv).unwrap();
+                        state.game = new_game;
+                    }
+                } else {
+                    state.moves.push(san);
+                }
+                state.game_state = game_state;
             }
             Err(e) => {
                 error!("{}", e);

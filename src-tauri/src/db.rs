@@ -3,6 +3,7 @@
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::Direction;
 use pgn_reader::{BufferedReader, SanPlus, Skip, Visitor};
+use shakmaty::Color;
 use std::path::Path;
 use std::{fs, io};
 use tracing::{error, info, warn};
@@ -26,8 +27,8 @@ pub struct OpeningDatabase {
     black_openings: OpeningGraph,
 }
 
-pub struct GameState<'a> {
-    openings: &'a OpeningGraph,
+#[derive(Clone)]
+pub struct GameState {
     pub current_move: Option<NodeIndex>,
     player_turn: bool,
     still_running: bool,
@@ -48,20 +49,24 @@ impl OpeningDatabase {
         })
     }
 
-    pub fn start_drill(&self, player: chess::Color, moves: &[SanPlus]) -> Option<GameState> {
-        let openings = match player {
-            chess::Color::White => &self.white_openings,
+    #[inline(always)]
+    pub fn graph(&self, player: Color) -> &OpeningGraph {
+        match player {
+            Color::White => &self.white_openings,
             _ => &self.black_openings,
-        };
+        }
+    }
+
+    pub fn start_drill(&self, player: Color, moves: &[SanPlus]) -> Option<GameState> {
+        let openings = self.graph(player);
         let mut state = GameState {
-            openings,
-            player_turn: player == chess::Color::White,
+            player_turn: player == Color::White,
             current_move: None,
             still_running: true,
         };
 
         for m in moves {
-            let prep = state.apply_move(m);
+            let prep = state.apply_move(m, openings);
             if prep != MoveAssessment::InPrep {
                 return None;
             }
@@ -96,15 +101,14 @@ impl OpeningDatabase {
     }
 }
 
-impl<'a> GameState<'a> {
+impl GameState {
     pub fn still_running(&self) -> bool {
         self.still_running
     }
 
-    pub fn check_move(&self) -> MoveAssessment {
+    pub fn check_move(&self, openings: &OpeningGraph) -> MoveAssessment {
         if let Some(current) = self.current_move {
-            if self
-                .openings
+            if openings
                 .neighbors_directed(current, Direction::Outgoing)
                 .count()
                 > 0
@@ -118,38 +122,41 @@ impl<'a> GameState<'a> {
         }
     }
 
-    pub fn make_move(&mut self) -> Option<SanPlus> {
+    pub fn make_move(&mut self, openings: &OpeningGraph) -> Option<SanPlus> {
+        if !self.still_running {
+            return None;
+        }
         let candidates = if let Some(index) = self.current_move {
-            self.openings
+            openings
                 .neighbors_directed(index, Direction::Outgoing)
                 .collect::<Vec<NodeIndex>>()
         } else {
-            self.find_roots()
+            self.find_roots(openings)
         };
         let choice = fastrand::choice(candidates.iter())?;
         self.current_move = Some(*choice);
         self.player_turn = !self.player_turn;
-        Some(self.openings[*choice].clone())
+        Some(openings[*choice].clone())
     }
 
-    pub fn apply_move(&mut self, san: &SanPlus) -> MoveAssessment {
+    pub fn apply_move(&mut self, san: &SanPlus, openings: &OpeningGraph) -> MoveAssessment {
         let mut has_neighbors = false;
         let mut possible_moves = vec![];
         if let Some(index) = self.current_move {
-            for next in self.openings.neighbors_directed(index, Direction::Outgoing) {
+            for next in openings.neighbors_directed(index, Direction::Outgoing) {
                 has_neighbors = true;
-                possible_moves.push(&self.openings[next]);
-                if &self.openings[next] == san {
+                possible_moves.push(&openings[next]);
+                if &openings[next] == san {
                     self.current_move = Some(next);
                     self.player_turn = !self.player_turn;
                     return MoveAssessment::InPrep;
                 }
             }
         } else {
-            for root in self.find_roots().iter() {
+            for root in self.find_roots(openings).iter() {
                 has_neighbors = true;
-                possible_moves.push(&self.openings[*root]);
-                if &self.openings[*root] == san {
+                possible_moves.push(&openings[*root]);
+                if &openings[*root] == san {
                     self.current_move = Some(*root);
                     self.player_turn = !self.player_turn;
                     return MoveAssessment::InPrep;
@@ -178,11 +185,10 @@ impl<'a> GameState<'a> {
         self.player_turn
     }
 
-    fn find_roots(&self) -> Vec<NodeIndex> {
+    fn find_roots(&self, openings: &OpeningGraph) -> Vec<NodeIndex> {
         let mut res = vec![];
-        for node in self.openings.node_indices() {
-            if self
-                .openings
+        for node in openings.node_indices() {
+            if openings
                 .neighbors_directed(node, Direction::Incoming)
                 .count()
                 == 0
@@ -284,14 +290,14 @@ impl Visitor for PgnVisitor {
     fn header(&mut self, key: &[u8], value: pgn_reader::RawHeader) {
         if let Some(player) = self.player.as_ref() {
             let color_key = match std::str::from_utf8(key) {
-                Ok("White") => chess::Color::White,
-                Ok("Black") => chess::Color::Black,
+                Ok("White") => Color::White,
+                Ok("Black") => Color::Black,
                 _ => return,
             };
 
             if let Ok(pgn_player) = std::str::from_utf8(value.0) {
                 if pgn_player == player {
-                    self.store_in_backup = color_key == chess::Color::Black;
+                    self.store_in_backup = color_key == Color::Black;
                 }
             }
         }
@@ -400,7 +406,7 @@ mod tests {
             SanPlus::from_ascii(b"e4").unwrap(),
             SanPlus::from_ascii(b"c6").unwrap(),
         ];
-        let _state = db.start_drill(chess::Color::Black, caro_kann).unwrap();
+        let _state = db.start_drill(Color::Black, caro_kann).unwrap();
 
         let qgd = &[
             SanPlus::from_ascii(b"d4").unwrap(),
@@ -408,7 +414,7 @@ mod tests {
             SanPlus::from_ascii(b"c4").unwrap(),
             SanPlus::from_ascii(b"e6").unwrap(),
         ];
-        let _state = db.start_drill(chess::Color::White, qgd).unwrap();
+        let _state = db.start_drill(Color::White, qgd).unwrap();
     }
 
     #[test]
