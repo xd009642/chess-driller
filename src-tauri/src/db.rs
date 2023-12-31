@@ -227,9 +227,9 @@ fn load_folder(folder: &Path) -> anyhow::Result<OpeningGraph> {
     }
 
     // debugging we can print the graphs and see they're right!
-    let pretty_graph = graph.map(|_, node| node.to_string(), |_, _| ());
-    let dot = petgraph::dot::Dot::new(&pretty_graph);
-    println!("{:?}", dot);
+    //let pretty_graph = graph.map(|_, node| node.to_string(), |_, _| ());
+    //let dot = petgraph::dot::Dot::new(&pretty_graph);
+    //println!("{:?}", dot);
     Ok(graph)
 }
 

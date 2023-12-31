@@ -62,12 +62,41 @@ pub mod commands {
     use tauri::State;
 
     #[tauri::command]
-    pub fn start(colour: &str, state: State<ChessState>) -> String {
-        todo!()
+    pub fn start(state: State<ChessState>) -> String {
+        let mut state = state.0.lock().unwrap();
+        if state.color == Color::White {
+            state.game_state = state.db.start_drill(Color::White, &state.moves);
+        } else {
+            state.game_state = state.db.start_drill(Color::Black, &state.moves);
+        }
+        let mut game_state = state.game_state.take();
+        if let Some(game_state) = game_state.as_mut() {
+            if !game_state.is_player_turn() {
+                let mv = game_state.make_move(state.db.graph(state.color));
+                if let Some(mv) = mv {
+                    let game = state.game.clone();
+
+                    let mv = mv.san.to_move(&game).unwrap();
+                    let new_game = game.clone().play(&mv).unwrap();
+                    state.game = new_game;
+                }
+            }
+        }
+        state.game_state = game_state;
+        state.game.board().to_string()
     }
 
     #[tauri::command]
-    pub fn reset(state: State<ChessState>) {}
+    pub fn reset(color: &str, state: State<ChessState>) {
+        info!("Resetting board for {}", color);
+        let mut state = state.0.lock().unwrap();
+        let color = Color::from_str(color).unwrap();
+        state.color = color;
+        state.game = Chess::new();
+        state.game_state = None;
+        state.moves.clear();
+        info!("Board reset");
+    }
 
     #[tauri::command]
     pub fn move_piece(from: &str, to: &str, promotion: &str, state: State<ChessState>) -> String {
