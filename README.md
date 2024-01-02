@@ -9,6 +9,7 @@ You'll need to install the tauri stuff to work (sort out links).
 Then to launch the program:
 
 ```
+npm install
 cargo tauri dev
 ```
 
