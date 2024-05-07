@@ -1,7 +1,6 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::env;
-use std::sync::Mutex;
 use tracing::info;
 use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::{Layer, Registry};
