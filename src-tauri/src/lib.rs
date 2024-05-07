@@ -1,5 +1,4 @@
 use anyhow::{anyhow, bail};
-use sdl2::image::InitFlag;
 use serde::{Deserialize, Serialize};
 use shakmaty::{san::SanPlus, Chess, Color, Position, Role, Square};
 use std::path::PathBuf;
