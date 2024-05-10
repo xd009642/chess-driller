@@ -47,4 +47,6 @@ and white)
 * Generally spot holes in your opening, and also target prep based on game
 history
 
+## License
 
+This project is currently licensed under GPL-v3.
