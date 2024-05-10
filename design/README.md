@@ -8,7 +8,8 @@ In chess the opening is the start of the game, and in order to get a strategic
 edge people learn different openings. So for the first so many moves of the
 game you have a general view of sequences of moves, decision points etc.
 At any one move we make there may also be multiple potential moves in our
-prep we can do - depending on how comprehensive it is.
+prep we can do - depending on how comprehensive it is. You can see an example
+of how opening prep is rendered in lichess [here](https://lichess.org/study/DbO6ys1v)
 
 Given files where each one is an opening to study that make up our "prep" we
 want to do a few things. I'll split these into gameplay and analysis.
