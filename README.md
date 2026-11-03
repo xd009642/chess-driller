@@ -5,23 +5,22 @@ against an engine.
 
 ## Run
 
-You'll need to install the tauri stuff to work (sort out links).
+Install Node.js, Rust, and the [Tauri 2 system prerequisites](https://v2.tauri.app/start/prerequisites/).
+The Rust crate and JavaScript API use Tauri 2.1; keep their minor versions aligned.
+The Rust package uses edition 2021 and does not declare a minimum Rust version.
+Native window drag-and-drop is disabled in the Tauri config so the chessboard
+can receive HTML drag events, including on Windows.
 
-Then to launch the program:
-
-```
+```sh
 npm install
-cargo tauri dev
+npm run tauri dev
 ```
 
-If that doesn't work you may need to do a 
+To build the desktop app without creating an installer:
 
+```sh
+npm run tauri -- build --no-bundle
 ```
-npm install
-```
-
-Currently, I just throw in an `npm install` if it complains about javascript
-packages and it seems to fix it...
 
 ## Database
 
