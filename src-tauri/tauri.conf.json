@@ -14,8 +14,9 @@
     "windows": [
       {
         "title": "Chess driller",
-        "width": 1160,
-        "height": 850,
+        "width": 1280,
+        "height": 960,
+        "center": true,
         "resizable": true,
         "minWidth": 760,
         "minHeight": 600,
