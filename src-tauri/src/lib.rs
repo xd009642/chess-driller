@@ -7,6 +7,7 @@ pub mod clients;
 pub mod config;
 pub mod db;
 pub mod game;
+mod repertoire;
 
 pub use crate::clients::chess_com::*;
 pub use crate::config::*;
