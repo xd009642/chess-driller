@@ -6,6 +6,7 @@ pub mod config;
 pub mod db;
 mod engine;
 pub mod game;
+mod opponent;
 mod repertoire;
 
 pub use crate::clients::chess_com::*;
@@ -99,6 +100,7 @@ mod commands {
     pub fn start(
         color: String,
         selected: Vec<u64>,
+        opponent: Option<opponent::Opponent>,
         state: State<'_, Mutex<App>>,
     ) -> Result<game::View, String> {
         let mut app = lock(&state)?;
@@ -122,7 +124,11 @@ mod commands {
                 files.push(file.clone());
             }
             let tree = repertoire::Repertoire::from_files(&files)?;
-            game::Session::new(tree, player)
+            game::Session::with_opponent(
+                tree,
+                player,
+                opponent.unwrap_or(opponent::Opponent::Stockfish),
+            )
         };
         let session = start().map_err(|e| format!("{e:#}"))?;
         let view = session.view();
@@ -161,27 +167,48 @@ mod commands {
     #[tauri::command]
     pub async fn engine_move(
         executable: String,
+        lichess_token: Option<String>,
         state: State<'_, Mutex<App>>,
     ) -> Result<game::View, String> {
-        let (revision, history) = {
+        let (revision, history, fen, opponent, fallback) = {
             let app = lock(&state)?;
             let session = app.session.as_ref().ok_or("Start a drill first")?;
             if !session.view().needs_engine {
                 return Err("No engine move is needed".into());
             }
-            (app.revision, session.history.clone())
+            (
+                app.revision,
+                session.history.clone(),
+                session.view().fen,
+                session.opponent,
+                session.fallback,
+            )
         };
-        let mv =
-            tauri::async_runtime::spawn_blocking(move || engine::best_move(&executable, &history))
-                .await
-                .map_err(|e| e.to_string())?
-                .map_err(|e| format!("{e:#}"))?;
+        let mv = tauri::async_runtime::spawn_blocking(move || match opponent {
+            opponent::Opponent::Lichess { rating, speed, .. } if !fallback => {
+                opponent::lichess_move(&fen, rating, speed, lichess_token.as_deref().unwrap_or(""))
+            }
+            opponent => {
+                let skill = match opponent {
+                    opponent::Opponent::Lichess { fallback_skill, .. } => Some(fallback_skill),
+                    opponent::Opponent::Stockfish => None,
+                };
+                engine::best_move(&executable, &history, skill).map(Some)
+            }
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("{e:#}"))?;
         let mut app = lock(&state)?;
         if app.revision != revision {
-            return Err("The drill changed while Stockfish was thinking".into());
+            return Err("The drill changed while the opponent was thinking".into());
         }
         let session = app.session.as_mut().ok_or("Start a drill first")?;
-        session.engine_move(&mv).map_err(|e| format!("{e:#}"))?;
+        match mv {
+            Some(mv) => session.engine_move(&mv),
+            None => session.use_stockfish(),
+        }
+        .map_err(|e| format!("{e:#}"))?;
         let view = session.view();
         app.revision += 1;
         Ok(view)

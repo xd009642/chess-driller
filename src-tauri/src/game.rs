@@ -1,4 +1,7 @@
-use crate::repertoire::{Repertoire, Source};
+use crate::{
+    opponent::Opponent,
+    repertoire::{Repertoire, Source},
+};
 use anyhow::{bail, Context};
 use serde::Serialize;
 use shakmaty::{
@@ -24,9 +27,14 @@ pub struct View {
     pub alternatives: Vec<String>,
     pub moves: Vec<String>,
     pub needs_engine: bool,
+    pub opponent: String,
+    pub fallback: bool,
+    pub uses_lichess: bool,
 }
 
 pub struct Session {
+    pub(crate) opponent: Opponent,
+    pub(crate) fallback: bool,
     position: Chess,
     player: Color,
     tree: Repertoire,
@@ -41,7 +49,18 @@ pub struct Session {
 
 impl Session {
     pub fn new(tree: Repertoire, player: Color) -> anyhow::Result<Self> {
+        Self::with_opponent(tree, player, Opponent::Stockfish)
+    }
+
+    pub(crate) fn with_opponent(
+        tree: Repertoire,
+        player: Color,
+        opponent: Opponent,
+    ) -> anyhow::Result<Self> {
+        opponent.validate()?;
         let mut session = Self {
+            opponent,
+            fallback: false,
             position: Chess::default(),
             player,
             tree,
@@ -66,6 +85,9 @@ impl Session {
             sources: self.tree.nodes[self.node].sources.clone(),
             alternatives: self.alternatives.clone(),
             moves: self.moves.clone(),
+            opponent: self.opponent_label(),
+            fallback: self.fallback,
+            uses_lichess: matches!(self.opponent, Opponent::Lichess { .. }) && !self.fallback,
             needs_engine: self.phase == Phase::Engine && self.position.turn() != self.player,
         }
     }
@@ -110,7 +132,11 @@ impl Session {
                 self.play(&canonical)?;
                 self.phase = Phase::Deviated;
                 self.alternatives = alternatives;
-                self.message = format!("{} is outside your selected prep. Retry the move or continue against Stockfish.", self.moves.last().context("Move was not recorded")?);
+                self.message = format!(
+                    "{} is outside your selected prep. Retry the move or continue against {}.",
+                    self.moves.last().context("Move was not recorded")?,
+                    self.opponent_label()
+                );
                 return Ok(());
             }
         } else {
@@ -142,7 +168,7 @@ impl Session {
         self.phase = Phase::Engine;
         self.retry = None;
         self.alternatives.clear();
-        self.message = "Outside prep — playing Stockfish.".into();
+        self.message = format!("Outside prep — playing {}.", self.opponent_label());
         self.advance()
     }
 
@@ -151,8 +177,29 @@ impl Session {
             bail!("No engine move is needed");
         }
         self.play(uci)
-            .context("Stockfish returned an illegal move")?;
+            .context("Opponent returned an illegal move")?;
         self.advance()
+    }
+
+    fn opponent_label(&self) -> String {
+        match self.opponent {
+            Opponent::Lichess { fallback_skill, .. } if self.fallback => {
+                format!("Stockfish (skill {fallback_skill})")
+            }
+            opponent => opponent.label(),
+        }
+    }
+
+    pub(crate) fn use_stockfish(&mut self) -> anyhow::Result<()> {
+        if !self.view().needs_engine
+            || self.fallback
+            || !matches!(self.opponent, Opponent::Lichess { .. })
+        {
+            bail!("No Lichess handover is pending");
+        }
+        self.fallback = true;
+        self.message = format!("Continuing against {}.", self.opponent_label());
+        Ok(())
     }
 
     fn finished(&mut self) -> bool {
@@ -172,7 +219,10 @@ impl Session {
         if self.phase == Phase::Prep {
             if self.tree.nodes[self.node].children.is_empty() {
                 self.phase = Phase::Engine;
-                self.message = "Prep complete — continuing against Stockfish.".into();
+                self.message = format!(
+                    "Prep complete — continuing against {}.",
+                    self.opponent_label()
+                );
             } else if self.position.turn() != self.player {
                 let (mv, next) = fastrand::choice(self.tree.nodes[self.node].children.iter())
                     .context("Prepared reply is missing")?
@@ -184,7 +234,10 @@ impl Session {
                 }
                 if self.tree.nodes[self.node].children.is_empty() {
                     self.phase = Phase::Engine;
-                    self.message = "Prep complete — continuing against Stockfish.".into();
+                    self.message = format!(
+                        "Prep complete — continuing against {}.",
+                        self.opponent_label()
+                    );
                 } else {
                     self.message = "In prep — your move.".into();
                 }
@@ -200,6 +253,10 @@ mod tests {
     use crate::repertoire::PrepFile;
 
     fn session(pgn: &str, player: Color) -> Session {
+        session_with_opponent(pgn, player, Opponent::Stockfish)
+    }
+
+    fn session_with_opponent(pgn: &str, player: Color, opponent: Opponent) -> Session {
         let tree = Repertoire::from_files(&[PrepFile {
             id: 1,
             name: "Study.pgn".into(),
@@ -207,7 +264,101 @@ mod tests {
             pgn: pgn.into(),
         }])
         .expect("Valid prep");
-        Session::new(tree, player).expect("Start drill")
+        Session::with_opponent(tree, player, opponent).expect("Start drill")
+    }
+
+    /// A Lichess reply uses the same legal-move and turn rules as engine play.
+    /// Prep can end on either side's move; changing rating and fallback skill
+    /// must not alter that handover or discard the accumulated history.
+    #[test]
+    fn lichess_handover_preserves_position_and_turn() {
+        use crate::opponent::Speed;
+        for player in [Color::White, Color::Black] {
+            for (rating, fallback_skill) in [(1200, 0), (2200, 10)] {
+                let opponent = Opponent::Lichess {
+                    rating,
+                    speed: Speed::Rapid,
+                    fallback_skill,
+                };
+                let mut drill = session_with_opponent("1. e4 e5 *", player, opponent);
+                drill
+                    .player_move(if player == Color::White {
+                        "e2e4"
+                    } else {
+                        "e7e5"
+                    })
+                    .expect("Finish prep");
+                assert_eq!(drill.history, ["e2e4", "e7e5"]);
+                assert_eq!(drill.view().opponent, opponent.label());
+                assert!(!drill.view().fallback);
+                if player == Color::White {
+                    drill.player_move("g1f3").expect("Player continues");
+                }
+                assert!(drill.view().needs_engine);
+                let before = drill.view().fen;
+                let history = drill.history.clone();
+                assert!(drill.engine_move("e2e4").is_err());
+                assert_eq!(drill.view().fen, before);
+                assert_eq!(drill.history, history);
+                drill.use_stockfish().expect("Sparse data handover");
+                assert_eq!(drill.view().fen, before);
+                assert_eq!(drill.history, history);
+                assert!(drill.view().needs_engine);
+                assert!(drill.view().fallback);
+                assert_eq!(
+                    drill.view().opponent,
+                    format!("Stockfish (skill {fallback_skill})")
+                );
+                drill
+                    .engine_move(if player == Color::White {
+                        "b8c6"
+                    } else {
+                        "g1f3"
+                    })
+                    .expect("Fallback reply");
+                assert!(!drill.view().needs_engine);
+                assert!(drill.view().fallback);
+                assert_eq!(&drill.history[..history.len()], history);
+                drill
+                    .player_move(if player == Color::White {
+                        "f1c4"
+                    } else {
+                        "b8c6"
+                    })
+                    .expect("Continue conversion practice");
+                assert!(drill.view().fallback);
+                assert!(drill.view().needs_engine);
+            }
+        }
+    }
+
+    /// Deviating must retain the selected opponent, and retry must still restore
+    /// prep. A subsequent Lichess reply can end the game without an engine call.
+    #[test]
+    fn lichess_deviation_retry_and_checkmate() {
+        let opponent = Opponent::Lichess {
+            rating: 1200,
+            speed: crate::opponent::Speed::Blitz,
+            fallback_skill: 0,
+        };
+        let mut drill = session_with_opponent("1. e4 *", Color::White, opponent);
+        let before = drill.view().fen;
+        drill.player_move("f2f3").expect("Deviation");
+        assert!(!drill.view().needs_engine);
+        drill.retry().expect("Retry");
+        assert_eq!(drill.view().fen, before);
+        drill.player_move("f2f3").expect("Deviation again");
+        drill
+            .continue_engine()
+            .expect("Continue with selected opponent");
+        assert_eq!(drill.view().opponent, opponent.label());
+        assert!(drill.view().needs_engine);
+        drill.engine_move("e7e5").expect("Lichess reply");
+        drill.player_move("g2g4").expect("Player blunder");
+        drill.engine_move("d8h4").expect("Lichess mating reply");
+        assert!(matches!(drill.view().phase, Phase::Finished));
+        assert!(!drill.view().needs_engine);
+        assert!(!drill.view().fallback);
     }
 
     /// Handover happens at the leaf itself, whether the player or the opponent

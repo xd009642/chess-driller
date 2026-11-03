@@ -51,7 +51,7 @@ impl Engine {
     }
 }
 
-pub fn best_move(executable: &str, moves: &[String]) -> anyhow::Result<String> {
+pub fn best_move(executable: &str, moves: &[String], skill: Option<u8>) -> anyhow::Result<String> {
     let mut command = Command::new(executable);
     command
         .stdin(Stdio::piped())
@@ -92,6 +92,9 @@ pub fn best_move(executable: &str, moves: &[String]) -> anyhow::Result<String> {
     engine.wait_for("uciok")?;
     engine.send("setoption name Threads value 1")?;
     engine.send("setoption name Hash value 32")?;
+    if let Some(skill) = skill {
+        engine.send(&format!("setoption name Skill Level value {skill}"))?;
+    }
     engine.send("ucinewgame")?;
     engine.send("isready")?;
     engine.wait_for("readyok")?;
@@ -115,13 +118,13 @@ mod tests {
     use shakmaty::{uci::Uci, Chess, Position};
 
     /// Exercise a real local Stockfish handshake and search from a non-starting
-    /// position. Any legal engine choice is acceptable; its exact move is not fixed.
+    /// position, including reduced skill for the fallback. Any legal engine
+    /// choice is acceptable; its exact move is not fixed.
     #[test]
     #[ignore = "requires STOCKFISH_EXECUTABLE pointing to a local Stockfish binary"]
     fn stockfish_returns_legal_reply() {
         let executable = std::env::var("STOCKFISH_EXECUTABLE").expect("Set STOCKFISH_EXECUTABLE");
-        let history = vec!["e2e4".into(), "c7c5".into(), "g1f3".into()];
-        let reply = best_move(&executable, &history).expect("Stockfish search");
+        let history: Vec<String> = vec!["e2e4".into(), "c7c5".into(), "g1f3".into()];
         let mut position = Chess::default();
         for mv in &history {
             let mv = mv
@@ -131,10 +134,13 @@ mod tests {
                 .expect("Legal history");
             position.play_unchecked(&mv);
         }
-        reply
-            .parse::<Uci>()
-            .expect("UCI reply")
-            .to_move(&position)
-            .expect("Legal engine reply");
+        for skill in [None, Some(0), Some(10)] {
+            let reply = best_move(&executable, &history, skill).expect("Stockfish search");
+            reply
+                .parse::<Uci>()
+                .expect("UCI reply")
+                .to_move(&position)
+                .expect("Legal engine reply");
+        }
     }
 }
