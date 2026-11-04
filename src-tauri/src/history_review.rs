@@ -1,9 +1,12 @@
 //! Review uses the same prefix tree as practice, but never mutates a drill.
 use crate::repertoire::{Repertoire, Source};
 use anyhow::{bail, Context};
-use pgn_reader::{BufferedReader, RawHeader, SanPlus, Skip, Visitor};
+use pgn_reader::{RawTag, Reader, SanPlus, Skip, Visitor};
 use serde::{Deserialize, Serialize};
-use shakmaty::{fen::Fen, san::San, uci::Uci, CastlingMode, Chess, Color, EnPassantMode, Position};
+use shakmaty::{
+    fen::Fen, san::San, uci::UciMove, CastlingMode, Chess, Color, EnPassantMode, Position,
+};
+use std::ops::ControlFlow;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PlayedMove {
@@ -22,7 +25,7 @@ struct Mainline {
 }
 
 pub fn fen(position: &Chess) -> String {
-    Fen::from_position(position.clone(), EnPassantMode::Legal).to_string()
+    Fen::from_position(position, EnPassantMode::Legal).to_string()
 }
 
 pub fn numbered(san: impl std::fmt::Display, ply: usize) -> String {
@@ -34,31 +37,35 @@ pub fn numbered(san: impl std::fmt::Display, ply: usize) -> String {
 }
 
 impl Visitor for Mainline {
-    type Result = ();
-    fn begin_game(&mut self) {
+    type Tags = ();
+    type Movetext = ();
+    type Output = ();
+    fn begin_tags(&mut self) -> ControlFlow<()> {
         self.games += 1;
+        ControlFlow::Continue(())
     }
-    fn header(&mut self, key: &[u8], value: RawHeader<'_>) {
+    fn tag(&mut self, _: &mut (), key: &[u8], value: RawTag<'_>) -> ControlFlow<()> {
         let value = value.decode_utf8_lossy();
         if (key == b"FEN" && value != fen(&Chess::default()))
             || (key == b"Variant" && !matches!(value.as_ref(), "Standard" | "Chess"))
         {
             self.error = Some("Unsupported variant or starting position".into());
         }
+        ControlFlow::Continue(())
     }
-    fn begin_variation(&mut self) -> Skip {
-        Skip(true)
+    fn begin_variation(&mut self, _: &mut ()) -> ControlFlow<(), Skip> {
+        ControlFlow::Continue(Skip(true))
     }
-    fn san(&mut self, san: SanPlus) {
+    fn san(&mut self, _: &mut (), san: SanPlus) -> ControlFlow<()> {
         if self.error.is_some() {
-            return;
+            return ControlFlow::Continue(());
         }
         match san.san.to_move(&self.position) {
             Ok(mv) => {
                 let before = fen(&self.position);
-                let san = numbered(San::from_move(&self.position, &mv), self.moves.len());
-                let uci = Uci::from_move(&mv, CastlingMode::Standard).to_string();
-                self.position.play_unchecked(&mv);
+                let san = numbered(San::from_move(&self.position, mv), self.moves.len());
+                let uci = UciMove::from_move(mv, CastlingMode::Standard).to_string();
+                self.position.play_unchecked(mv);
                 self.moves.push(PlayedMove {
                     uci,
                     san,
@@ -68,8 +75,12 @@ impl Visitor for Mainline {
             }
             Err(error) => self.error = Some(format!("Illegal mainline move {san}: {error}")),
         }
+        ControlFlow::Continue(())
     }
-    fn end_game(&mut self) {}
+    fn end_game(&mut self, _: ()) {}
+    fn begin_movetext(&mut self, _: ()) -> ControlFlow<()> {
+        ControlFlow::Continue(())
+    }
 }
 
 // pgn-reader deliberately skips unrecognised tokens. That is useful for study
@@ -188,7 +199,9 @@ fn validate_tokens(pgn: &str) -> anyhow::Result<usize> {
 pub fn parse(pgn: &str) -> anyhow::Result<Vec<PlayedMove>> {
     let expected_moves = validate_tokens(pgn)?;
     let mut visitor = Mainline::default();
-    BufferedReader::new(pgn.as_bytes()).read_all(&mut visitor)?;
+    Reader::new(pgn.as_bytes())
+        .read_games(&mut visitor)
+        .try_for_each(|result| result)?;
     if let Some(error) = visitor.error {
         bail!("{error}");
     }
@@ -252,10 +265,10 @@ pub fn compare(
         {
             let mv = played
                 .uci
-                .parse::<Uci>()?
+                .parse::<UciMove>()?
                 .to_move(&position)
                 .context("Invalid validated game move")?;
-            position.play_unchecked(&mv);
+            position.play_unchecked(mv);
             node = *next;
             review.matched_ply += 1;
         } else {
@@ -268,11 +281,11 @@ pub fn compare(
             review.played = Some(played.clone());
             for (uci, child) in &tree.nodes[node].children {
                 let mv = uci
-                    .parse::<Uci>()?
+                    .parse::<UciMove>()?
                     .to_move(&position)
                     .context("Invalid prep move")?;
                 review.alternatives.push(Alternative {
-                    san: numbered(San::from_move(&position, &mv), ply),
+                    san: numbered(San::from_move(&position, mv), ply),
                     uci: uci.clone(),
                     sources: tree.nodes[*child].sources.clone(),
                 });

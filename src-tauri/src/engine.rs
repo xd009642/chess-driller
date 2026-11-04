@@ -115,7 +115,7 @@ pub fn best_move(executable: &str, moves: &[String], skill: Option<u8>) -> anyho
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shakmaty::{uci::Uci, Chess, Position};
+    use shakmaty::{uci::UciMove, Chess, Position};
 
     /// Exercise a real local Stockfish handshake and search from a non-starting
     /// position, including reduced skill for the fallback. Any legal engine
@@ -128,16 +128,16 @@ mod tests {
         let mut position = Chess::default();
         for mv in &history {
             let mv = mv
-                .parse::<Uci>()
+                .parse::<UciMove>()
                 .expect("UCI history")
                 .to_move(&position)
                 .expect("Legal history");
-            position.play_unchecked(&mv);
+            position.play_unchecked(mv);
         }
         for skill in [None, Some(0), Some(10)] {
             let reply = best_move(&executable, &history, skill).expect("Stockfish search");
             reply
-                .parse::<Uci>()
+                .parse::<UciMove>()
                 .expect("UCI reply")
                 .to_move(&position)
                 .expect("Legal engine reply");

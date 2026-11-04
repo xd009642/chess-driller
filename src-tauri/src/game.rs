@@ -5,7 +5,7 @@ use crate::{
 use anyhow::{bail, Context};
 use serde::Serialize;
 use shakmaty::{
-    fen::Fen, san::SanPlus, uci::Uci, CastlingMode, Chess, Color, EnPassantMode, Position,
+    fen::Fen, san::SanPlus, uci::UciMove, CastlingMode, Chess, Color, EnPassantMode, Position,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize)]
@@ -78,7 +78,7 @@ impl Session {
 
     pub fn view(&self) -> View {
         View {
-            fen: Fen::from_position(self.position.clone(), EnPassantMode::Legal).to_string(),
+            fen: Fen::from_position(&self.position, EnPassantMode::Legal).to_string(),
             color: self.player.to_string(),
             phase: self.phase,
             message: self.message.clone(),
@@ -93,12 +93,12 @@ impl Session {
     }
 
     fn play(&mut self, uci: &str) -> anyhow::Result<()> {
-        let mv = uci.parse::<Uci>()?.to_move(&self.position)?;
+        let mv = uci.parse::<UciMove>()?.to_move(&self.position)?;
         self.moves
-            .push(SanPlus::from_move(self.position.clone(), &mv).to_string());
+            .push(SanPlus::from_move(self.position.clone(), mv).to_string());
         self.history
-            .push(Uci::from_move(&mv, CastlingMode::Standard).to_string());
-        self.position.play_unchecked(&mv);
+            .push(UciMove::from_move(mv, CastlingMode::Standard).to_string());
+        self.position.play_unchecked(mv);
         Ok(())
     }
 
@@ -108,8 +108,8 @@ impl Session {
             bail!("It is not your turn");
         }
         // Validate before changing the session, including the source square and promotion.
-        let mv = uci.parse::<Uci>()?.to_move(&self.position)?;
-        let canonical = Uci::from_move(&mv, CastlingMode::Standard).to_string();
+        let mv = uci.parse::<UciMove>()?.to_move(&self.position)?;
+        let canonical = UciMove::from_move(mv, CastlingMode::Standard).to_string();
         if self.phase == Phase::Prep {
             let next = self.tree.nodes[self.node]
                 .children
@@ -124,8 +124,8 @@ impl Session {
                     .children
                     .iter()
                     .map(|(m, _)| {
-                        let mv = m.parse::<Uci>()?.to_move(&self.position)?;
-                        Ok(SanPlus::from_move(self.position.clone(), &mv).to_string())
+                        let mv = m.parse::<UciMove>()?.to_move(&self.position)?;
+                        Ok(SanPlus::from_move(self.position.clone(), mv).to_string())
                     })
                     .collect::<anyhow::Result<Vec<_>>>()?;
                 self.retry = Some(self.position.clone());
@@ -203,7 +203,7 @@ impl Session {
     }
 
     fn finished(&mut self) -> bool {
-        if let Some(outcome) = self.position.outcome() {
+        if let Some(outcome) = self.position.outcome().known() {
             self.phase = Phase::Finished;
             self.message = format!("Game over: {outcome}");
             true

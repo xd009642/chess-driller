@@ -1,9 +1,10 @@
 //! A prefix tree of legal moves. Sources belong to nodes so shared prefixes retain
 //! every contributing chapter without allowing an unselected file to supply replies.
 use anyhow::{anyhow, bail, Context};
-use pgn_reader::{BufferedReader, RawHeader, SanPlus, Skip, Visitor};
+use pgn_reader::{RawTag, Reader, SanPlus, Skip, Visitor};
 use serde::{Deserialize, Serialize};
-use shakmaty::{uci::Uci, CastlingMode, Chess, Position};
+use shakmaty::{uci::UciMove, CastlingMode, Chess, Position};
+use std::ops::ControlFlow;
 use std::{fs, path::PathBuf};
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -50,8 +51,9 @@ impl Repertoire {
                 game_number: 0,
                 error: None,
             };
-            BufferedReader::new(file.pgn.as_bytes())
-                .read_all(&mut visitor)
+            Reader::new(file.pgn.as_bytes())
+                .read_games(&mut visitor)
+                .try_for_each(|result| result)
                 .with_context(|| format!("Cannot read {}", file.name))?;
             if let Some(error) = visitor.error {
                 bail!("{}: {error}", file.name);
@@ -77,18 +79,21 @@ struct Importer<'a> {
 }
 
 impl Visitor for Importer<'_> {
-    type Result = ();
+    type Tags = ();
+    type Movetext = ();
+    type Output = ();
 
-    fn begin_game(&mut self) {
+    fn begin_tags(&mut self) -> ControlFlow<()> {
         self.game_number += 1;
         self.position = Chess::default();
         self.node = 0;
         self.before = (self.position.clone(), 0);
         self.variations.clear();
         self.chapter = format!("Chapter {}", self.game_number);
+        ControlFlow::Continue(())
     }
 
-    fn header(&mut self, key: &[u8], value: RawHeader<'_>) {
+    fn tag(&mut self, _: &mut (), key: &[u8], value: RawTag<'_>) -> ControlFlow<()> {
         let value = value.decode_utf8_lossy().to_string();
         match key {
             b"Event" if !value.is_empty() && value != "?" => self.chapter = value,
@@ -101,21 +106,22 @@ impl Visitor for Importer<'_> {
             }
             _ => {}
         }
+        ControlFlow::Continue(())
     }
 
-    fn san(&mut self, san: SanPlus) {
+    fn san(&mut self, _: &mut (), san: SanPlus) -> ControlFlow<()> {
         if self.error.is_some() {
-            return;
+            return ControlFlow::Continue(());
         }
         let mv = match san.san.to_move(&self.position) {
             Ok(mv) => mv,
             Err(error) => {
                 self.error = Some(format!("{}: illegal move {san}: {error}", self.chapter));
-                return;
+                return ControlFlow::Continue(());
             }
         };
         self.before = (self.position.clone(), self.node);
-        let uci = Uci::from_move(&mv, CastlingMode::Standard).to_string();
+        let uci = UciMove::from_move(mv, CastlingMode::Standard).to_string();
         let next = self.tree.nodes[self.node]
             .children
             .iter()
@@ -139,29 +145,34 @@ impl Visitor for Importer<'_> {
             }
         }
         self.node = next;
-        self.position.play_unchecked(&mv);
+        self.position.play_unchecked(mv);
+        ControlFlow::Continue(())
     }
 
-    fn begin_variation(&mut self) -> Skip {
+    fn begin_variation(&mut self, _: &mut ()) -> ControlFlow<(), Skip> {
         self.variations
             .push(((self.position.clone(), self.node), self.before.clone()));
         (self.position, self.node) = self.before.clone();
-        Skip(false)
+        ControlFlow::Continue(Skip(false))
     }
 
-    fn end_variation(&mut self) {
+    fn end_variation(&mut self, _: &mut ()) -> ControlFlow<()> {
         if let Some((current, before)) = self.variations.pop() {
             (self.position, self.node) = current;
             self.before = before;
         } else {
             self.error = Some("Unbalanced PGN variation".into());
         }
+        ControlFlow::Continue(())
     }
 
-    fn end_game(&mut self) {
+    fn end_game(&mut self, _: ()) {
         if !self.variations.is_empty() {
             self.error = Some("Unclosed PGN variation".into());
         }
+    }
+    fn begin_movetext(&mut self, _: ()) -> ControlFlow<()> {
+        ControlFlow::Continue(())
     }
 }
 

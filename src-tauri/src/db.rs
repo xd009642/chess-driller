@@ -2,8 +2,9 @@
 //! of a mini stripped-down move database.
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::Direction;
-use pgn_reader::{BufferedReader, SanPlus, Skip, Visitor};
+use pgn_reader::{Reader, SanPlus, Skip, Visitor};
 use shakmaty::Color;
+use std::ops::ControlFlow;
 use std::path::Path;
 use std::{fs, io};
 use tracing::{error, info, warn};
@@ -83,7 +84,7 @@ impl OpeningDatabase {
     pub fn add_multigame_pgn(&mut self, pgns: impl io::Read, player: String) -> anyhow::Result<()> {
         let white = self.white_openings.clone();
         let black = self.black_openings.clone();
-        let mut reader = BufferedReader::new(pgns);
+        let mut reader = Reader::new(pgns);
 
         let mut visitor = PgnVisitor::new_game_recorder(white, black, player);
         while reader.has_more()? {
@@ -216,7 +217,7 @@ fn load_folder(folder: &Path) -> anyhow::Result<OpeningGraph> {
                 continue;
             }
         };
-        let mut reader = BufferedReader::new(load);
+        let mut reader = Reader::new(load);
         let mut pgn_visitor = PgnVisitor::new_with_graph(graph);
         reader.read_game(&mut pgn_visitor)?;
 
@@ -285,14 +286,19 @@ impl PgnVisitor {
 }
 
 impl Visitor for PgnVisitor {
-    type Result = ();
+    type Tags = ();
+    type Movetext = ();
+    type Output = ();
+    fn begin_tags(&mut self) -> ControlFlow<()> {
+        ControlFlow::Continue(())
+    }
 
-    fn header(&mut self, key: &[u8], value: pgn_reader::RawHeader) {
+    fn tag(&mut self, _: &mut (), key: &[u8], value: pgn_reader::RawTag) -> ControlFlow<()> {
         if let Some(player) = self.player.as_ref() {
             let color_key = match std::str::from_utf8(key) {
                 Ok("White") => Color::White,
                 Ok("Black") => Color::Black,
-                _ => return,
+                _ => return ControlFlow::Continue(()),
             };
 
             if let Ok(pgn_player) = std::str::from_utf8(value.0) {
@@ -301,15 +307,16 @@ impl Visitor for PgnVisitor {
                 }
             }
         }
+        ControlFlow::Continue(())
     }
 
-    fn end_game(&mut self) -> Self::Result {
+    fn end_game(&mut self, _: ()) -> Self::Output {
         self.node_stack.clear();
         self.first = true;
         ()
     }
 
-    fn san(&mut self, san_plus: SanPlus) {
+    fn san(&mut self, _: &mut (), san_plus: SanPlus) -> ControlFlow<()> {
         let pgn = match &mut self.pgn {
             Pgn::Dual { black, .. } if self.store_in_backup => black,
             Pgn::Single { .. } if self.store_in_backup => {
@@ -337,7 +344,7 @@ impl Visitor for PgnVisitor {
                 for neighbor in pgn.neighbors_directed(*old_node, Direction::Outgoing) {
                     if pgn[neighbor] == san_plus {
                         self.node_stack.push(neighbor);
-                        return;
+                        return ControlFlow::Continue(());
                     }
                 }
                 let node = pgn.add_node(san_plus);
@@ -348,9 +355,10 @@ impl Visitor for PgnVisitor {
                 self.node_stack.push(node);
             }
         }
+        ControlFlow::Continue(())
     }
 
-    fn begin_variation(&mut self) -> Skip {
+    fn begin_variation(&mut self, _: &mut ()) -> ControlFlow<(), Skip> {
         let pgn = match &mut self.pgn {
             Pgn::Dual { black, .. } if self.store_in_backup => black,
             Pgn::Single { .. } if self.store_in_backup => {
@@ -375,12 +383,16 @@ impl Visitor for PgnVisitor {
         } else {
             warn!("No root?");
         }
-        Skip(false)
+        ControlFlow::Continue(Skip(false))
     }
 
-    fn end_variation(&mut self) {
+    fn end_variation(&mut self, _: &mut ()) -> ControlFlow<()> {
         // We now want to add to last node before variation
         self.node_stack.pop();
+        ControlFlow::Continue(())
+    }
+    fn begin_movetext(&mut self, _: ()) -> ControlFlow<()> {
+        ControlFlow::Continue(())
     }
 }
 
