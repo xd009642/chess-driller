@@ -6,7 +6,12 @@ pub mod config;
 pub mod db;
 mod engine;
 pub mod game;
+mod history;
+mod history_commands;
+mod history_providers;
+mod history_review;
 mod opponent;
+mod provider_http;
 mod repertoire;
 
 pub use crate::clients::chess_com::*;
@@ -22,7 +27,11 @@ struct App {
 pub fn launch() -> anyhow::Result<()> {
     tauri::Builder::default()
         .setup(|app| {
-            let library = repertoire::Library::load(app.path().app_data_dir()?)?;
+            let directory = app.path().app_data_dir()?;
+            let library = repertoire::Library::load(directory.clone())?;
+            app.manage(history_commands::HistoryState(std::sync::Arc::new(
+                Mutex::new(history::Store::load(directory)),
+            )));
             app.manage(Mutex::new(App {
                 library,
                 session: None,
@@ -31,6 +40,12 @@ pub fn launch() -> anyhow::Result<()> {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            history_commands::open_history_game,
+            history_commands::history_state,
+            history_commands::save_account,
+            history_commands::cancel_history,
+            history_commands::refresh_history,
+            history_commands::review_history,
             commands::list_prep,
             commands::import_prep,
             commands::start,

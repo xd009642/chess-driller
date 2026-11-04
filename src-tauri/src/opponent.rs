@@ -123,6 +123,7 @@ pub fn lichess_move(
     if token.trim().is_empty() {
         bail!("Enter a Lichess API token to use the explorer (no permission scopes required)");
     }
+    let mut request_gate = crate::provider_http::gate(true)?;
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(15))
         .user_agent("chess-driller")
@@ -146,7 +147,7 @@ pub fn lichess_move(
         bail!("Lichess rejected the token. Enter a valid API token and retry");
     }
     if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        bail!("Lichess rate limit reached. Wait at least one minute before retrying");
+        crate::provider_http::status(&response, &mut request_gate)?;
     }
     response
         .error_for_status()

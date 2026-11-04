@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Chessboard } from 'react-chessboard'
+import History from './History'
 
 // Rounded inverse of Stockfish's CCRL Blitz calibration for skills 0–19.
 // Skill 20 disables weakening and has no fixed rating estimate.
@@ -10,6 +11,7 @@ const skillEloEstimates = [1300, 1400, 1600, 1700, 2000, 2200, 2400, 2500, 2600,
 const initialPosition = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 
 function App() {
+  const [page, setPage] = useState('practice')
   const [files, setFiles] = useState([])
   const [selected, setSelected] = useState([])
   const [color, setColor] = useState('white')
@@ -32,7 +34,7 @@ function App() {
 
   useEffect(() => {
     invoke('list_prep').then(setFiles).catch(reason => setError(String(reason)))
-    const observer = new ResizeObserver(([entry]) => setBoardWidth(Math.floor(entry.contentRect.width)))
+    const observer = new ResizeObserver(([entry]) => { if (entry.contentRect.width > 0) setBoardWidth(Math.floor(entry.contentRect.width)) })
     observer.observe(boardContainer.current)
     return () => observer.disconnect()
   }, [])
@@ -108,7 +110,9 @@ function App() {
   return (
     <main>
       <header><div><p className="eyebrow">Opening practice</p><h1>Chess driller</h1></div><span className="local-label">Opening prep · continued play</span></header>
-      <div className="workspace">
+      <nav aria-label="Main navigation">{[['practice', 'Practice'], ['history', 'Game history'], ['settings', 'Settings']].map(([value, label]) => <button key={value} aria-current={page === value ? 'page' : undefined} onClick={() => setPage(value)}>{label}</button>)}</nav>
+      <History page={page} files={files} />
+      <div className="workspace" hidden={page !== 'practice'}>
         <aside className="panel library" tabIndex={0} aria-label="Repertoire and opponent settings">
           <h2>Your repertoire</h2>
           <label htmlFor="color">Train as</label>
