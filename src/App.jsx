@@ -108,7 +108,7 @@ function App() {
   const phaseLabels = { prep: 'In prep', deviated: 'Out of prep', engine: session?.opponent || 'Continued play', finished: 'Game over' }
 
   return (
-    <main>
+    <main className={page === 'practice' ? 'practice-page' : undefined}>
       <header><div><p className="eyebrow">Opening practice</p><h1>Chess driller</h1></div><span className="local-label">Opening prep · continued play</span></header>
       <nav aria-label="Main navigation">{[['practice', 'Practice'], ['history', 'Game history'], ['settings', 'Settings']].map(([value, label]) => <button key={value} aria-current={page === value ? 'page' : undefined} onClick={() => setPage(value)}>{label}</button>)}</nav>
       <History page={page} files={files} />
