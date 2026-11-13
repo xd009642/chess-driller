@@ -5,7 +5,7 @@ against Stockfish or replies drawn from Lichess games.
 
 ## Run
 
-Install Node.js, Rust, and the [Tauri 2 system prerequisites](https://v2.tauri.app/start/prerequisites/).
+Install Node.js, Rust, and the [Tauri v2 system prerequisites](https://v2.tauri.app/start/prerequisites/).
 The Rust crate and JavaScript API use Tauri 2.1; keep their minor versions aligned.
 The Rust package uses edition 2021 and does not declare a minimum Rust version.
 Native window drag-and-drop is disabled in the Tauri config so the chessboard
@@ -51,65 +51,14 @@ repetition or the fifty-move rule are not yet exposed in the UI.
 
 ## Game history
 
-1. Open Settings and save your public Chess.com or Lichess username, or both.
-   Saving works offline and does not sign you in or verify account ownership.
-2. Open Game history and select Refresh games. Each account shows its last
-   successful fetch, requested range, cached dates, skipped records and limits.
-3. Select White and Black prep files independently of your active drill.
-   All files start selected. Selection changes rerun comparison locally.
-4. Filter by provider, colour, result or review outcome, then select a game.
-   The board opens before its first departure. Use Previous, Next or the move
-   buttons to inspect the game. Alternatives include their filenames and chapters.
-
-Switching views preserves your active drill. Review distinguishes your departure,
-an opponent's unprepared reply, the end of selected prep and a game ending within
-prep. A departure means different from selected prep, not necessarily a bad move.
-Comparison follows exact move prefixes, including all selected prep variations;
-it does not match transpositions. Played variations are ignored. The whole played
-mainline must be legal before the app classifies it.
-
-Refresh retains up to 100 eligible games per account within the past 90 days.
-Only completed standard games from the normal starting position qualify, including
-rated and casual games. Daily and correspondence games are excluded.
-Chess.com archives use completion times. Lichess filters and orders its export by
-start time; the displayed date is the last-move time, which may precede resignation
-or timeout. Games started before the Lichess window are excluded. This is bounded
-coverage, not a complete account history.
-
-Each refresh scans at most 2,000 records per account, stopping after 100 eligible
-games. Skipped records do not use the eligible-game allowance. Responses are
-limited to 16 MiB and Lichess NDJSON records to 256 KiB. Requests time out after
-30 seconds, with a 10-second connection deadline. A single bounded Lichess export
-avoids ambiguous date-only pagination; equal-timestamp games at the limit may be
-missing. Refresh rescans the window and deduplicates by provider game ID.
-
-Chess.com months are fetched newest first and sorted locally. Conditional requests
-revalidate cached responses, including across month rollover. The response cache
-holds at most 5 responses in memory and honours `no-store`. Recent Chess.com games
-may take time to appear. Lichess history and explorer requests share a request gate
-and rate-limit cooldown. A rate limit requires at least 60 seconds, or longer if
-`Retry-After` says so. There are no automatic retries or background refreshes.
-
-Account settings and games are saved together in versioned `history.json` beside
-`prep.json`, using temporary-file replacement. Previously saved games remain
-available offline and after partial fetch failures. Cancellation stops future
-requests and discards late results; an active request may take until its deadline
-to finish. Changing or removing an account asks for confirmation and deletes its
-local history. The old configuration directory is left untouched. Corrupt or
-unsupported history files produce an error and are preserved for recovery.
-
-History uses public, anonymous APIs and never uses the explorer token. No review
-conclusions are saved: the app recomputes them from cached PGNs and selected prep.
-The first version does not provide engine evaluation, automatic prep edits,
-win-rate dashboards or personalised scheduling.
-
-Provider contracts: [Chess.com Published-Data API](https://www.chess.com/news/view/published-data-api),
-[Lichess game export](https://github.com/lichess-org/api/blob/master/doc/specs/tags/games/api-games-user-username.yaml)
-and [Lichess API usage guidance](https://lichess.org/page/api-tips).
-Lichess's [export implementation](https://github.com/lichess-org/lila/blob/master/modules/api/src/main/GameApiV2.scala)
-confirms that its date filters use game creation times.
+Given your chess.com or lichess username the chess driller can analyse your
+game history against your prep files and identify where you're going out of prep.
 
 ## Lichess continuation
+
+As well as playing against stockfish you can also continue against lichess players
+of a given skill band. This allows you to get a representative game against players
+of a desired strength level.
 
 Choose **Lichess players** under **Continue after prep**, then select a rating
 band and time control. The app queries the current position through the
@@ -148,7 +97,8 @@ starting if you want to finish games after the database runs out.
 Download [Stockfish](https://stockfishchess.org/download/) separately. Set the
 **Executable name or full path** field to its executable (for example,
 `/usr/games/stockfish`), or leave `stockfish` if it is on your PATH. This setting
-is remembered locally. No cloud engine or account is needed.
+is remembered locally. No cloud engine or account is needed. Stockfish may
+be available via your system package manager.
 
 The app uses UCI and sends the full move history, allowing Stockfish to recognise
 repetitions. Each move uses one thread, 32 MiB of hash memory and 700 ms of search.
